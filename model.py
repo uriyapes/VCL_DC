@@ -12,11 +12,11 @@ class Model(object):
 
     def get_dataset(self):
         if self.dataset_name == "image_seg":
-            FILENAME_TRAIN = r'datasets/image-segmentation/image-segmentation_train.arff'
-            FILENAME_TEST = r'datasets/image-segmentation/image-segmentation_test.arff'
+            FILENAME_TRAIN = r'datasets/image-segmentation/segmentation.data'
+            FILENAME_TEST = r'datasets/image-segmentation/segmentation.test'
             assert_values_flag = True
             dataset_dict = {'name': 'image_segmentation', 'file_names': (FILENAME_TRAIN, FILENAME_TEST),
-                            'assert_values_flag': assert_values_flag, 'validation_percentage': 30.0}
+                            'assert_values_flag': assert_values_flag, 'validation_percentage': 15.0}
             self.dataset = parse_image_seg.Dataset(dataset_dict)
         else:
             assert(0)
@@ -137,7 +137,7 @@ class Model(object):
 
     def train_model(self):
         self.epoch = 0
-        num_steps = 500
+        num_steps = 1500
         self.initial_train_labels = np.copy(self.dataset.get_train_labels())
 
         self.sess = tf.Session()
