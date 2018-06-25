@@ -1,10 +1,9 @@
 from scipy.io import arff
-
+import collections
 import numpy as np
 from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.model_selection import ShuffleSplit
 
-D = 1
 # train_set_percentage = 0.8
 # validation_set_percentage = 0.0
 # test_set_percentage = 0.2
@@ -37,17 +36,16 @@ class Dataset(object):
         self.name = dataset_dict['name']
         self.dict = dataset_dict
         train_set, labels = self.file_to_dataset(dataset_dict['file_names'][0])
-        labels = self._map_class_str_to_num(labels)
+        train_labels = self._map_class_str_to_num(labels)
 
         if train_set.ndim == 2:
             N, T = train_set.shape
+            self.D = 1
         else:
             assert (0, "shape isn't 2, add extra dimensions")
 
-        assert (N, T, D, 1) == train_set[:, :, None, None].shape
-        self.D = D
         if dataset_dict['assert_values_flag']:
-            self._assert_dataset_val(train_set, labels, N, T)
+            self._assert_dataset_val(train_set, train_labels, N, T)
 
 
         test_set, test_labels = self.file_to_dataset(dataset_dict['file_names'][1])
@@ -56,23 +54,23 @@ class Dataset(object):
         train_set, test_set = self.norm_input(train_set, test_set)
         #update T in case we removed some features
         self.T = train_set.shape[1]
-        if dataset_dict['validation_percentage'] == 0:
-            validation_set_len = 0
-        else:
-            validation_set_len = np.floor(N * dataset_dict['validation_percentage'] / 100.0)
-            validation_ratio_floor = 1.0 * validation_set_len / N
 
-        train_set, train_labels, validation_set, validation_labels = \
-            self.generate_balanced_splits(train_set, labels, validation_ratio_floor)
-        assert validation_set_len == validation_set.shape[0]
-        assert train_set.shape[0] + validation_set.shape[0] == N
+
+        if self.dict['validation_percentage'] != 0:
+            train_set, train_labels, validation_set, validation_labels = \
+                self._create_valid_set_from_train_set(train_set, train_labels)
+            self.validation_labels = self.encode_one_hot(validation_labels)
+            self.validation_set = validation_set
+            self.validation_set_exist = True
+        else:
+            self.validation_labels = None
+            self.validation_set = None
+            self.validation_set_exist = False
 
         self.train_labels = self.encode_one_hot(train_labels)
-        self.validation_labels = self.encode_one_hot(validation_labels)
         self.test_labels = self.encode_one_hot(test_labels)
 
         self.train_set = train_set
-        self.validation_set = validation_set
         self.test_set = test_set
 
 
@@ -89,36 +87,24 @@ class Dataset(object):
 
         return train_set, test_set
 
+    def _create_valid_set_from_train_set(self, train_set, labels):
+        assert(self.dict['validation_percentage'] > 0 and self.dict['validation_percentage'] < 100)
+        N = train_set.shape[0]
+        validation_set_len = np.floor(N * self.dict['validation_percentage']/ 100.0)
+        validation_ratio_floor = 1.0 * validation_set_len / N
+
+        train_set, train_labels, validation_set, validation_labels = \
+            self.generate_balanced_splits(train_set, labels, validation_ratio_floor)
+        assert validation_set_len == validation_set.shape[0]
+        assert train_set.shape[0] + validation_set.shape[0] == N
+        return train_set, train_labels, validation_set, validation_labels
+
     @staticmethod
     def _norm_and_remove_invalid_val(input, mean, std):
         input = (input - mean) / std
         # check for Nan values in case some columns have constant values -> if this is the case we will get Nan values
         # for the entire column so only need to check for Nan values in the first row and delete the columns with Nans
         return np.delete(input, np.where(np.isnan(input)[0])[0], 1)
-
-    def get_train_set(self):
-        return self.train_set.astype(np.float32)
-
-    def get_validation_set(self):
-        return self.validation_set.astype(np.float32)
-
-    def get_test_set(self):
-        return self.test_set.astype(np.float32)
-
-    def get_dimensions(self):
-        return (self.T, self.D)
-
-    def get_num_of_labels(self):
-        return num_labels
-
-    def get_train_labels(self):
-        return self.train_labels
-
-    def get_validation_labels(self):
-        return self.validation_labels
-
-    def get_test_labels(self):
-        return self.test_labels
 
     def _map_class_str_to_num(self, labels_str):
         if not self.dict.has_key('class_dict'):
@@ -192,7 +178,7 @@ class Dataset(object):
         labels = data_from_file[:, label_ind]
         samples = data_from_file[:, bool_ind]
         # Assumes D==1
-        assert D == 1
+        assert samples.ndim == 2
         return samples, labels
 
     @staticmethod
@@ -263,6 +249,41 @@ class Dataset(object):
         dataset = dataset[permutations, :]
         return dataset, labels_one_hot
 
+    def get_train_set(self):
+        return self.train_set.astype(np.float32)
+
+    def get_validation_set(self):
+        return self.validation_set.astype(np.float32)
+
+    def get_test_set(self):
+        return self.test_set.astype(np.float32)
+
+    def get_dimensions(self):
+        return (self.T, self.D)
+
+    def get_num_of_labels(self):
+        return num_labels
+
+    def get_train_labels(self):
+        return self.train_labels
+
+    def get_validation_labels(self):
+        return self.validation_labels
+
+    def get_test_labels(self):
+        return self.test_labels
+
+    def count_classes_for_all_datasets(self):
+        print "train labels " + str(self.count_classes(self.get_train_labels()))
+        if self.dict['validation_percentage'] != 0:
+            print "validation labels " + str(self.count_classes(self.get_validation_labels()))
+        else:
+            print "validation labels - SKIP (no validation set)"
+        print "test labels " + str(self.count_classes(self.get_test_labels()))
+
+    @staticmethod
+    def count_classes(dataset_labels):
+        return collections.Counter(tuple(np.argmax(dataset_labels, 1) + 1))
 
 if __name__ == '__main__':
     # FILENAME_TRAIN = r'datasets/image-segmentation-badArff/image-segmentation_train.arff'
