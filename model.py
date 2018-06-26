@@ -26,14 +26,17 @@ class Model(object):
             self.reshuffle_flag = False
 
         num_hidden = self.embed_vec_size
-        init_learning_rate = 0.01
-        learning_rate_updated_= 1e-3
+        self.learning_rate = 0.01
+        self.learning_rate_update_at_epoch = 200
+        self.learning_rate_updated = 1e-3
 
         # Input data.
         self.tf_train_minibatch = tf.placeholder(
             tf.float32, shape=(self.batch_size, T), name="train_minibatch_placeholder")
         self.tf_train_labels = tf.placeholder(tf.float32, shape=(self.batch_size, num_labels),
                                               name="train_labels_placeholder")
+        self.keep_prob = tf.placeholder(tf.float32)
+        self.learning_rate_ph = tf.placeholder(tf.float32)
 
         self.tf_train_dataset = tf.constant(self.dataset.get_train_set())
         if self.dataset.validation_set_exist:
@@ -71,8 +74,9 @@ class Model(object):
 
             hidden_no_relu = tf.matmul(hidden, layer3_weights) + layer3_biases
             hidden = tf.nn.relu(hidden_no_relu)
+            drop_out = tf.nn.dropout(hidden, self.keep_prob)
 
-            output = tf.matmul(hidden, layer4_weights) + layer4_biases
+            output = tf.matmul(drop_out, layer4_weights) + layer4_biases
             return output
 
         # Training computation.
@@ -94,12 +98,12 @@ class Model(object):
         self.loss = tf.reduce_mean(
             tf.nn.softmax_cross_entropy_with_logits(labels=self.tf_train_labels, logits=logits))
         # Optimizer.
-        self.optimizer = self.build_optimizer(init_learning_rate)
+        self.optimizer = self.build_optimizer(self.learning_rate_ph)
 
 
     def train_model(self):
         self.epoch = 0
-        num_steps = 1500
+        step = 0
         self.initial_train_labels = np.copy(self.dataset.get_train_labels())
 
         self.sess = tf.Session()
@@ -107,13 +111,14 @@ class Model(object):
         with self.sess.as_default():
             print('Initialized')
             self.mini_batch_step = 0
-            # TODO: replace with self.epoch < 500
-            for step in range(num_steps):
+            while self.epoch < 500:
+                step += 1
                 batch_data, batch_labels = self.get_mini_batch()
-                feed_dict = {self.tf_train_minibatch : batch_data, self.tf_train_labels : batch_labels}
+                feed_dict = {self.tf_train_minibatch : batch_data, self.tf_train_labels : batch_labels,
+                             self.keep_prob : 0.5, self.learning_rate_ph: self.learning_rate}
                 _, l, predictions = self.sess.run(
                     [self.optimizer, self.loss, self.train_prediction], feed_dict=feed_dict)
-                if (step % 50 == 0):
+                if (step % 100 == 0):
                     print('batch_labels: {}'.format(np.argmax(batch_labels, 1)))
                     print('predictions: {}'.format(np.argmax(predictions, 1)))
                     print('Minibatch loss at step %d: %f' % (step, l))
@@ -130,11 +135,11 @@ class Model(object):
         test_labels = self.dataset.get_test_labels()
         with self.sess.as_default():
             print('Train accuracy: %.3f' % self.accuracy(
-                self.train_prediction_full_set.eval(), self.initial_train_labels))
+                self.train_prediction_full_set.eval(feed_dict={self.keep_prob : 1}), self.initial_train_labels))
 
             self.eval_validation_accuracy()
 
-            test_pred_eval = self.test_prediction.eval()
+            test_pred_eval = self.test_prediction.eval(feed_dict={self.keep_prob : 1})
             network_acc = self.accuracy(test_pred_eval, test_labels)
             print('Test accuracy of the network classifier: %.3f' % network_acc)
         return self.dataset.get_test_set(), (np.argmax(self.dataset.get_test_labels(), 1) + 1), network_acc, test_pred_eval
@@ -144,14 +149,19 @@ class Model(object):
         if (offset + self.batch_size) > self.dataset.train_labels.shape[0]:
             offset = 0
             self.mini_batch_step = 0
-            self.epoch += 1
-            if self.reshuffle_flag:
-                self.dataset.re_shuffle()
+            self.new_epoch_update()
 
         batch_data = self.dataset.train_set[offset:(offset + self.batch_size), :]
         batch_labels = self.dataset.train_labels[offset:(offset + self.batch_size), :]
         self.mini_batch_step += 1
         return batch_data, batch_labels
+
+    def new_epoch_update(self):
+        self.epoch += 1
+        if self.learning_rate_update_at_epoch == self.epoch:
+            self.learning_rate = self.learning_rate_updated
+        if self.reshuffle_flag:
+            self.dataset.re_shuffle()
 
     @staticmethod
     def accuracy(predictions, labels):
@@ -161,7 +171,7 @@ class Model(object):
     def eval_validation_accuracy(self):
         if self.dataset.validation_set_exist:
             print('Validation accuracy: %.3f' % self.accuracy(
-                self.valid_prediction.eval(), self.dataset.get_validation_labels()))
+                self.valid_prediction.eval(feed_dict={self.keep_prob : 1}), self.dataset.get_validation_labels()))
         else:
             print 'Validation accuracy: Nan - no validation set, IGNORE'
 
@@ -179,7 +189,7 @@ if __name__ == '__main__':
     FILENAME_TEST = r'datasets/image-segmentation/segmentation.test'
     assert_values_flag = True
     dataset_dict = {'name': 'image_segmentation', 'file_names': (FILENAME_TRAIN, FILENAME_TEST),
-                    'assert_values_flag': assert_values_flag, 'validation_percentage': 15.0}
+                    'assert_values_flag': assert_values_flag, 'validation_percentage': 0.0}
 
     model = Model(embed_vec_size=256, num_of_layers=4)
     model.get_dataset(dataset_dict)
