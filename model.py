@@ -242,8 +242,9 @@ if __name__ == '__main__':
     FILENAME_TEST = r'datasets/image-segmentation/segmentation.test'
     assert_values_flag = True
     dataset_dict = {'name': 'image_segmentation', 'file_names': (FILENAME_TRAIN, FILENAME_TEST),
-                    'assert_values_flag': assert_values_flag, 'validation_train_ratio': 0.15}
-
+                    'assert_values_flag': assert_values_flag, 'validation_train_ratio': 0.0,
+                    'test_alldata_ratio' : 0.5}
+    assert(type(dataset_dict['test_alldata_ratio']) == float and type(dataset_dict['validation_train_ratio'] == float))
     #depth of 4
     hidden_size_list = [256,256,256]
     # TODO: add support for different dropout rates in different layers

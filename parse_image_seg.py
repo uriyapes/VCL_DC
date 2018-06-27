@@ -26,7 +26,8 @@ class Dataset(object):
         This class create a dataset from datasets files
         To create the class pass it the dataset_dict.
         dataset_dict = {name: 'image_segmentation', file_names: (<file name train>, <file name test>,
-                        <file name validation>), assert_values_flag: <Boolean>, 'validation_train_ratio': <valid_size/train_size}
+                        <file name validation>), assert_values_flag: <Boolean>, 'validation_train_ratio': <valid_size/train_size>
+                         'test_alldata_ratio' : <test_size / (all_dataset_size}
         file_names can contain 1,2 or 3 file names, accordingly those files names determine the train/validation/test
         split. If only 1 file is present the split must be determined by the user.
 
@@ -51,14 +52,17 @@ class Dataset(object):
         test_set, test_labels = self.file_to_dataset(dataset_dict['file_names'][1])
         test_labels = self._map_class_str_to_num(test_labels)
 
-        # train_test_ratio = train_labels.shape[0] / test_labels.shape[0]
-        # if (self.dict['train_test_ratio'] is None) or (self.dict['train_test_ratio'] == train_test_ratio):
-        #     print "Don't change train/test ratio, keep it: {}".format(train_test_ratio)
-        # elif self.dict['train_test_ratio'] != train_test_ratio:
-        #     print "Change ratio between train/test to: {}".format(train_test_ratio)
-        #
-        # else:
-        #     assert(0)
+        test_alldata_ratio = 1.0 * test_labels.shape[0] / (test_labels.shape[0] + train_labels.shape[0])
+        if (self.dict['test_alldata_ratio'] is None) or (np.isclose(self.dict['test_alldata_ratio'], test_alldata_ratio)):
+            print "Don't change train/test ratio, keep it: {}".format(test_alldata_ratio)
+        elif self.dict['test_alldata_ratio'] != test_alldata_ratio:
+            print "Change ratio between train/test to: {}".format(self.dict['test_alldata_ratio'])
+            full_dataset = np.concatenate((train_set, test_set), axis=0)
+            full_labels = np.concatenate((train_labels, test_labels), axis=0)
+            train_set, train_labels, test_set, test_labels = \
+                self.generate_balanced_splits(full_dataset, full_labels, self.dict['test_alldata_ratio'])
+        else:
+            assert(0)
 
 
         train_set, test_set = self.norm_input(train_set, test_set)
@@ -69,13 +73,14 @@ class Dataset(object):
         if self.dict['validation_train_ratio'] != 0:
             train_set, train_labels, validation_set, validation_labels = \
                 self.generate_balanced_splits(train_set, train_labels, self.dict['validation_train_ratio'])
+            self.validation_set_exist = True
             self.validation_labels = self.encode_one_hot(validation_labels)
             self.validation_set = validation_set
-            self.validation_set_exist = True
         else:
+            self.validation_set_exist = False
             self.validation_labels = None
             self.validation_set = None
-            self.validation_set_exist = False
+
 
         self.train_labels = self.encode_one_hot(train_labels)
         self.test_labels = self.encode_one_hot(test_labels)
@@ -196,10 +201,13 @@ class Dataset(object):
         :return: 1 fold containing the train set (data and labels) and the test set (data and labels)
         """
         N = samples.shape[0]
-        ratio_test_samples = cls.floor_ratio(ratio_test_samples, N)
+        # ratio_test_samples = cls.floor_ratio(ratio_test_samples, N)
+        test_size = int(np.floor(ratio_test_samples * N))
         n_splits = 1
         # random_state=None for real random or random_state={seed number}
-        sss = StratifiedShuffleSplit(n_splits=n_splits, test_size=ratio_test_samples, random_state=None)
+        # test_size - If float, should be between 0.0 and 1.0 and represent the proportion of the dataset to include in
+        #             the test split. If int, represents the absolute number of test samples
+        sss = StratifiedShuffleSplit(n_splits=n_splits, test_size=test_size, random_state=None)
         sss.get_n_splits(samples, labels)
 
         # if n_splits isn't 1 we should expand the function to return more than 1 fold
@@ -210,7 +218,7 @@ class Dataset(object):
             test_set = samples[test_index]
             test_labels = labels[test_index]
 
-        assert N * ratio_test_samples == test_set.shape[0]
+        assert test_size == test_set.shape[0]
         assert train_set.shape[0] + test_set.shape[0] == N
 
         return train_set, train_labels, test_set, test_labels
@@ -316,7 +324,8 @@ if __name__ == '__main__':
     assert_values_flag = True
     dataset_dict = {'name': 'image_segmentation', 'file_names': (FILENAME_TRAIN, FILENAME_TEST),
                     'assert_values_flag': True,
-                    'validation_train_ratio': 0.15}
+                    'validation_train_ratio': 0.15,
+                    'test_alldata_ratio' : 300.0/330}
     ds = Dataset(dataset_dict)
     #  #  labels = np.concatenate([1 * np.ones(11), 2 * np.ones(11), 3 * np.ones(11)]).astype(int)
     #  labels = np.concatenate([ii*np.ones(24) for ii in range(1,16)]).astype(int)
