@@ -196,6 +196,8 @@ class NeuralNet(object):
             self.learning_rate = self.learning_rate_updated
         if self.reshuffle_flag:
             self.dataset.re_shuffle()
+        else:
+            print "reshuffle is OFF"
 
     @staticmethod
     def accuracy(predictions, labels):
@@ -240,9 +242,9 @@ if __name__ == '__main__':
     FILENAME_TEST = r'datasets/image-segmentation/segmentation.test'
     assert_values_flag = True
     dataset_dict = {'name': 'image_segmentation', 'file_names': (FILENAME_TRAIN, FILENAME_TEST),
-                    'assert_values_flag': assert_values_flag, 'validation_percentage': 0.0}
+                    'assert_values_flag': assert_values_flag, 'validation_train_ratio': 0.15}
 
-    #depth of 5
+    #depth of 4
     hidden_size_list = [256,256,256]
     # TODO: add support for different dropout rates in different layers
     dropout_rate = 0.5
