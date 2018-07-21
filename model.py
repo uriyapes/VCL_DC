@@ -136,9 +136,10 @@ class NeuralNet(object):
 
     def train_model(self):
         self.epoch = 0
+        prev_epoch = -1
         step = 0
         self.initial_train_labels = np.copy(self.dataset.get_train_labels())
-
+        dropout = self.dropout_l[-1]
         self.sess = tf.Session()
         self.sess.run(tf.global_variables_initializer())
         with self.sess.as_default():
@@ -148,13 +149,14 @@ class NeuralNet(object):
                 step += 1
                 batch_data, batch_labels = self.get_mini_batch()
                 feed_dict = {self.tf_train_minibatch : batch_data, self.tf_train_labels : batch_labels,
-                             self.keep_prob_ph : 0.5, self.learning_rate_ph: self.learning_rate}
+                             self.keep_prob_ph : dropout, self.learning_rate_ph: self.learning_rate}
                 _, l, predictions = self.sess.run(
                     [self.optimizer, self.loss, self.train_prediction], feed_dict=feed_dict)
-                if (step % 100 == 0):
+                if (prev_epoch != self.epoch):
+                    prev_epoch = self.epoch
                     print('batch_labels: {}'.format(np.argmax(batch_labels, 1)))
                     print('predictions: {}'.format(np.argmax(predictions, 1)))
-                    print('Minibatch loss at step %d: %f' % (step, l))
+                    print('Minibatch loss at epoch %d: %f' % (self.epoch, l))
                     print('Minibatch accuracy: %.3f' % self.accuracy(predictions, batch_labels))
                     self.eval_validation_accuracy()
 
@@ -242,20 +244,20 @@ if __name__ == '__main__':
     FILENAME_TEST = r'datasets/image-segmentation/segmentation.test'
     assert_values_flag = True
     dataset_dict = {'name': 'image_segmentation', 'file_names': (FILENAME_TRAIN, FILENAME_TEST),
-                    'assert_values_flag': assert_values_flag, 'validation_train_ratio': 0.0,
-                    'test_alldata_ratio' : 0.5}
+                    'assert_values_flag': assert_values_flag, 'validation_train_ratio': 0.1,
+                    'test_alldata_ratio' : 0.05}
     assert(type(dataset_dict['test_alldata_ratio']) == float and type(dataset_dict['validation_train_ratio'] == float))
-    #depth of 4
-    hidden_size_list = [256,256,256]
     # TODO: add support for different dropout rates in different layers
-    dropout_rate = 0.5
-    dropout_hidden_list = [0, 0, dropout_rate]
+    keep_prob = 0.5
+    #depth of 5
+    hidden_size_list = [256,256,256]
+    dropout_hidden_list = [0, 0, keep_prob]
     #depth of 8
     # hidden_size_list = [256,256,256,256,256,256,256]
-    # dropout_hidden_list = [0, 0, 0, 0, 0, 0, dropout_rate]
+    # dropout_hidden_list = [0, 0, 0, 0, 0, 0, keep_prob]
     #depth of 16
-    # hidden_size_list = [256,256,256,256,256,256,256,256,256,256,256,256,256,256,256]
-    # dropout_hidden_list = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, dropout_rate]
+    # hidden_size_list = [256] * 15
+    # dropout_hidden_list = [0] *14 +[keep_prob]
 
     model = NeuralNet(hidden_size_list, dropout_hidden_list)
     model.get_dataset(dataset_dict)
