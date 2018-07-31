@@ -36,52 +36,54 @@ class Dataset(object):
     def __init__(self, dataset_dict):
         self.name = dataset_dict['name']
         self.dict = dataset_dict
-        train_set, labels = self.file_to_dataset(dataset_dict['file_names'][0])
-        train_labels = self._map_class_str_to_num(labels)
+        # data, labels = self.file_to_dataset(dataset_dict['file_names'][0])
+        data = np.genfromtxt(dataset_dict['file_names'][0], delimiter=',', dtype='float32')
+        labels = np.genfromtxt(dataset_dict['file_names'][1], delimiter=',', dtype='float32')
+        # labels = self._map_class_str_to_num(labels)
 
-        if train_set.ndim == 2:
-            N, T = train_set.shape
+        if data.ndim == 2:
+            N, T = data.shape
             self.D = 1
         else:
-            assert (0, "shape isn't 2, add extra dimensions")
+            assert(0, "shape isn't 2, add extra dimensions")
 
         if dataset_dict['assert_values_flag']:
-            self._assert_dataset_val(train_set, train_labels, N, T)
+            self._assert_dataset_val(data, labels, N, T)
 
-
-        test_set, test_labels = self.file_to_dataset(dataset_dict['file_names'][1])
-        test_labels = self._map_class_str_to_num(test_labels)
-
-        test_alldata_ratio = 1.0 * test_labels.shape[0] / (test_labels.shape[0] + train_labels.shape[0])
-        if (self.dict['test_alldata_ratio'] is None) or (np.isclose(self.dict['test_alldata_ratio'], test_alldata_ratio)):
-            print "Don't change train/test ratio, keep it: {}".format(test_alldata_ratio)
-        elif self.dict['test_alldata_ratio'] != test_alldata_ratio:
-            print "Change ratio between train/test to: {}".format(self.dict['test_alldata_ratio'])
-            full_dataset = np.concatenate((train_set, test_set), axis=0)
-            full_labels = np.concatenate((train_labels, test_labels), axis=0)
-            train_set, train_labels, test_set, test_labels = \
-                self.generate_balanced_splits(full_dataset, full_labels, self.dict['test_alldata_ratio'])
+        index_matrix_test = self.read_folds_indexes(dataset_dict['file_names'][2])
+        fold_0_test_indexes = index_matrix_test[:, 0]
+        if self.dict['validation_train_ratio'] != 0:
+            index_matrix_validation = self.read_folds_indexes(dataset_dict['file_names'][3])
+            fold_0_validation_indexes = index_matrix_validation[:, 0]
         else:
-            assert(0)
+            fold_0_validation_indexes = np.zeros(data.shape[0])
+
+        train_set, train_labels, validation_set, validation_labels, test_set, test_labels = self.gen_splits_from_index_vec\
+            (fold_0_test_indexes, fold_0_validation_indexes, data, labels)
 
 
-        train_set, test_set = self.norm_input(train_set, test_set)
-        #update T in case we removed some features
+        # test_set, test_labels = self.file_to_dataset(dataset_dict['file_names'][1])
+        # test_labels = self._map_class_str_to_num(test_labels)
+        #
+        # test_alldata_ratio = 1.0 * test_labels.shape[0] / (test_labels.shape[0] + train_labels.shape[0])
+        # if (self.dict['test_alldata_ratio'] is None) or (np.isclose(self.dict['test_alldata_ratio'], test_alldata_ratio)):
+        #     print "Don't change train/test ratio, keep it: {}".format(test_alldata_ratio)
+        # elif self.dict['test_alldata_ratio'] != test_alldata_ratio:
+        #     print "Change ratio between train/test to: {}".format(self.dict['test_alldata_ratio'])
+        #     full_dataset = np.concatenate((train_set, test_set), axis=0)
+        #     full_labels = np.concatenate((train_labels, test_labels), axis=0)
+        #     train_set, train_labels, test_set, test_labels = \
+        #         self.generate_balanced_splits(full_dataset, full_labels, self.dict['test_alldata_ratio'])
+        # else:
+        #     assert(0)
+        #
+        #
+        # train_set, test_set = self.norm_input(train_set, test_set)
+        # #update T in case we removed some features
         self.T = train_set.shape[1]
 
-
-        if self.dict['validation_train_ratio'] != 0:
-            train_set, train_labels, validation_set, validation_labels = \
-                self.generate_balanced_splits(train_set, train_labels, self.dict['validation_train_ratio'])
-            self.validation_set_exist = True
-            # self.validation_labels = self.encode_one_hot(validation_labels)
-            self.validation_labels = validation_labels
-            self.validation_set = validation_set
-        else:
-            self.validation_set_exist = False
-            self.validation_labels = None
-            self.validation_set = None
-
+        self.validation_labels = validation_labels
+        self.validation_set = validation_set
 
         # self.train_labels = self.encode_one_hot(train_labels)
         # self.test_labels = self.encode_one_hot(test_labels)
@@ -137,7 +139,7 @@ class Dataset(object):
         if filename.endswith(".arff"):
             data_from_file, _ = cls._read_from_arff_file(filename)
             samples, labels = cls._split_samples_from_labels(data_from_file, label_ind)
-        elif filename.endswith(".data") or filename.endswith(".test"):
+        elif filename.endswith(".data") or filename.endswith(".test") or filename.endswith(".dat"):
             samples, labels = cls._read_from_csv(filename, label_column_ind=label_ind)
         else:
             assert (0)
@@ -190,10 +192,10 @@ class Dataset(object):
 
     @staticmethod
     def _assert_dataset_val(samples, labels, N, T):
-        assert samples[0, 0] == np.float32(140.0)
-        assert samples[1, 0] == np.float32(188)
-        assert samples[N - 1, T - 1] == np.float32(1.8388497)
-        assert labels[N - 1] == max_label
+        assert samples[0, 0] == np.float32(0.207173)
+        assert samples[1, 0] == np.float32(0.854911)
+        assert samples[N - 1, T - 1] == np.float32(-0.427312868586892)
+        assert np.max(labels) == max_label
 
     @classmethod
     def generate_balanced_splits(cls, samples, labels, ratio_test_samples):
@@ -236,23 +238,33 @@ class Dataset(object):
         :param filename: the name of the file containing the indexes of each fold
         :return:
         """
-        index_matrix = np.genfromtxt(filename, delimiter=',', dtype='str')
+        # dtype='bool' don't work for 0's and 1's so read as uint8 and use astype
+        index_matrix = np.genfromtxt(filename, delimiter=',', dtype='uint8').astype(bool)
         return index_matrix
 
     @staticmethod
-    def gen_splits_from_index_vec(index_vec, samples, labels):
+    def gen_splits_from_index_vec(not_test_indexes, validation_indexes, samples, labels):
         """
-        :param index_vec: a vector which contains 0's and 1's, 0 means the according instance is used for training and
-        means the according instance is used for validation/testing
+        :param not_test_indexes: a vector which contains 0's and 1's, 0 means the according instance is used for testing and 1
+        means the according instance is used for training/validation
+        :param validation_indexes: a vector which contains 0's and 1's, 0 means the according instance is used for
+        training/testing and 1 means the according instance is used for validation
         :param samples: the dataset samples we want to split according to the index_vec
         :param labels: the dataset labels we want to split according to the index_vec
         :return:
         """
-        train_set = samples[index_vec == 0]
-        train_labels = labels[index_vec == 0]
-        test_set = samples[index_vec == 1]
-        test_labels = labels[index_vec == 1]
-        return train_set, train_labels, test_set, test_labels
+
+        test_indexes_mask = np.logical_and(not_test_indexes == 0, validation_indexes == 0)
+        test_set = samples[test_indexes_mask]
+        test_labels = labels[test_indexes_mask]
+
+        validation_set = samples[validation_indexes == 1]
+        validation_labels = labels[validation_indexes == 1]
+
+        train_indexes_mask = np.logical_and(not_test_indexes == 1, validation_indexes == 0)
+        train_set = samples[train_indexes_mask]
+        train_labels = labels[train_indexes_mask]
+        return train_set, train_labels, validation_set, validation_labels, test_set, test_labels
 
     @staticmethod
     def floor_ratio(ratio, N):
@@ -349,12 +361,15 @@ if __name__ == '__main__':
     # FILENAME_TRAIN = r'datasets/image-segmentation-badArff/image-segmentation_train.arff'
     # FILENAME_TEST = r'datasets/image-segmentation-badArff/image-segmentation_test.arff'
 
-    FILENAME_TRAIN = r'datasets/image-segmentation/segmentation.data'
-    FILENAME_TEST = r'datasets/image-segmentation/segmentation.test'
+    FILENAME_DATA = r'/home/a/Downloads/UCI_from_Michael/data/image-segmentation/image-segmentation_py.dat'
+    FILENAME_LABELS = r'/home/a/Downloads/UCI_from_Michael/data/image-segmentation/labels_py.dat'
+    # FILENAME_TEST = r'datasets/image-segmentation/segmentation.test'
+    FILENAME_INDEXES_TEST = r'/home/a/Downloads/UCI_from_Michael/data/image-segmentation/folds_py.dat'
+    FILENAME_VALIDATION_INDEXES = r'/home/a/Downloads/UCI_from_Michael/data/image-segmentation/validation_folds_py.dat'
     assert_values_flag = True
-    dataset_dict = {'name': 'image_segmentation', 'file_names': (FILENAME_TRAIN, FILENAME_TEST),
-                    'assert_values_flag': True,
-                    'validation_train_ratio': 0.15,
+    dataset_dict = {'name': 'image_segmentation', 'file_names': (FILENAME_DATA, FILENAME_LABELS, FILENAME_INDEXES_TEST, FILENAME_VALIDATION_INDEXES),
+                    'assert_values_flag': assert_values_flag,
+                    'validation_train_ratio': 0.0,
                     'test_alldata_ratio' : 300.0/330}
     ds = Dataset(dataset_dict)
     #  #  labels = np.concatenate([1 * np.ones(11), 2 * np.ones(11), 3 * np.ones(11)]).astype(int)

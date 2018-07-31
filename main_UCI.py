@@ -82,12 +82,16 @@ bn = args.bn
 keep = args.keep
 data_path = args.data_path
 
-FILENAME_TRAIN = r'datasets/image-segmentation/segmentation.data'
-FILENAME_TEST = r'datasets/image-segmentation/segmentation.test'
+FILENAME_DATA = r'/home/a/Downloads/UCI_from_Michael/data/image-segmentation/image-segmentation_py.dat'
+FILENAME_LABELS = r'/home/a/Downloads/UCI_from_Michael/data/image-segmentation/labels_py.dat'
+# FILENAME_TEST = r'datasets/image-segmentation/segmentation.test'
+FILENAME_INDEXES_TEST = r'/home/a/Downloads/UCI_from_Michael/data/image-segmentation/folds_py.dat'
+FILENAME_VALIDATION_INDEXES = r'/home/a/Downloads/UCI_from_Michael/data/image-segmentation/validation_folds_py.dat'
 assert_values_flag = True
-dataset_dict = {'name': 'image_segmentation', 'file_names': (FILENAME_TRAIN, FILENAME_TEST),
-                'assert_values_flag': assert_values_flag, 'validation_train_ratio': 0.15,
-                'test_alldata_ratio': 0.2}
+dataset_dict = {'name': 'image_segmentation', 'file_names': (FILENAME_DATA, FILENAME_LABELS, FILENAME_INDEXES_TEST, FILENAME_VALIDATION_INDEXES),
+                'assert_values_flag': assert_values_flag,
+                'validation_train_ratio': 5.0,
+                'test_alldata_ratio': 300.0 / 330}
 trainset = parse_image_seg_UCI.Dataset(dataset_dict)
 
 # datasets = os.listdir(data_path)
