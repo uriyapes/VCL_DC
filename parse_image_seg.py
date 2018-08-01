@@ -64,7 +64,7 @@ class Dataset(object):
         else:
             assert(0)
 
-
+        # TODO: normalization should happen after splitting the train_set to train and validation splits so we won't take the statistics of the validation into account
         train_set, test_set = self.norm_input(train_set, test_set)
         #update T in case we removed some features
         self.T = train_set.shape[1]

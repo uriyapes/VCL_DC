@@ -39,7 +39,7 @@ class NeuralNet(object):
             self.tf_valid_dataset = tf.constant(self.dataset.get_validation_set())
         tf_test_dataset = tf.constant(self.dataset.get_test_set())
 
-        self.set_architecture_variables()
+        self.set_architecture_variables(weights_init_type="Xavier")
 
         # Training computation.
         # Predictions for the training, validation, and test data.
@@ -60,7 +60,7 @@ class NeuralNet(object):
         self.loss = tf.reduce_mean(
             tf.nn.softmax_cross_entropy_with_logits(labels=self.tf_train_labels, logits=logits))
         # Optimizer.
-        self.optimizer = self.build_optimizer(self.learning_rate_ph)
+        self.optimizer = self.build_optimizer(self.learning_rate_ph, self.loss)
 
     def set_architecture_variables(self, weights_init_type="He"):
         if weights_init_type == "He":
@@ -70,18 +70,22 @@ class NeuralNet(object):
             # Xavier initializer - not exactly because we only look at the input size(FAN_IN) and not the output size and
             # it is random distrbution and not uniform.
             # weights_init = tf.random_normal_initializer(stddev=1/np.sqrt(shape[1]))
-            weights_init = tf.contrib.layers.variance_scaling_initializer(factor=1.0, mode='FAN_IN', uniform=False, seed=None, dtype=tf.float32)
+            # weights_init = tf.contrib.layers.variance_scaling_initializer(factor=1.0, mode='FAN_IN', uniform=False, seed=None, dtype=tf.float32)
+            pass
         else:
             assert 0
         self.weights_l = []
         self.biases_l = []
 
         # first layer parameters
+        # TODO: move the initializer back to the if statment in the start of the method.
+        weights_init = tf.random_normal_initializer(stddev=1 / np.sqrt(self.dataset.get_dimensions()[0]))
         self.weights_l.append(tf.get_variable('layer1_weights', shape=[self.dataset.get_dimensions()[0], self.layer_size_l[0]],
                                               dtype=tf.float32, initializer=weights_init))
         self.biases_l.append(tf.get_variable('layer1_bias', shape=[self.layer_size_l[0]], dtype=tf.float32,
                                          initializer=tf.zeros_initializer()))
 
+        weights_init = tf.random_normal_initializer(stddev=1 / np.sqrt(self.layer_size_l[0]))
         for i in range(1, len(self.layer_size_l)):
             self.weights_l.append(tf.get_variable('layer{}_weights'.format(i+1), shape=[self.layer_size_l[i-1],self.layer_size_l[i]],
                                              dtype=tf.float32, initializer=weights_init))
@@ -143,7 +147,8 @@ class NeuralNet(object):
                     print('predictions: {}'.format(np.argmax(predictions, 1)))
                     print('Minibatch loss at epoch %d: %f' % (self.epoch, l))
                     print('Minibatch accuracy: %.3f' % self.accuracy(predictions, batch_labels))
-                    self.eval_validation_accuracy()
+                    # self.eval_validation_accuracy()
+                    self.eval_model()
 
         self.dataset.count_classes_for_all_datasets()
         #self.dataset.count_classes(batch_labels)
@@ -166,6 +171,7 @@ class NeuralNet(object):
 
     def get_mini_batch(self):
         offset = (self.mini_batch_step * self.batch_size)
+        # TODO: when reshuffle flag is False we will constantly ignore the end of the dataset. solution: take the end of the dataset, do reshuffle and take the begining of the suffled dataset
         if (offset + self.batch_size) > self.dataset.train_labels.shape[0]:
             offset = 0
             self.mini_batch_step = 0
@@ -202,9 +208,16 @@ class NeuralNet(object):
         nn = nearest_neighbor.NearestNeighbor()
         return nn.compute_one_nearest_neighbor_accuracy(train_set, train_labels, test_set, test_labels)
 
-    def build_optimizer(self, init_learning_rate):
-        # return tf.train.AdamOptimizer(init_learning_rate).minimize(self.loss)
-        return tf.train.GradientDescentOptimizer(init_learning_rate).minimize(self.loss)
+    def build_optimizer(self, lr_node, loss):
+        # return tf.train.AdamOptimizer(lr_node).minimize(self.loss)
+        # return tf.train.GradientDescentOptimizer(lr_node).minimize(self.loss)
+        t_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+        optimizer = tf.train.MomentumOptimizer(lr_node, 0.9)
+        grads_and_vars = optimizer.compute_gradients(loss, var_list=t_vars)
+        clip_constant = 1
+        grads_and_vars_rescaled = [(tf.clip_by_norm(gv[0], clip_constant), gv[1]) for gv in grads_and_vars]
+        train_op_net = optimizer.apply_gradients(grads_and_vars_rescaled)
+        return train_op_net
 
     def set_batch_size(self, batch_size):
         self.batch_size = batch_size
@@ -230,7 +243,7 @@ if __name__ == '__main__':
     assert_values_flag = True
     dataset_dict = {'name': 'image_segmentation', 'file_names': (FILENAME_TRAIN, FILENAME_TEST),
                     'assert_values_flag': assert_values_flag, 'validation_train_ratio': 0.1,
-                    'test_alldata_ratio' : 0.05}
+                    'test_alldata_ratio' : 0.01}
     assert(type(dataset_dict['test_alldata_ratio']) == float and type(dataset_dict['validation_train_ratio'] == float))
     # TODO: add support for different dropout rates in different layers
     keep_prob = 0.5
