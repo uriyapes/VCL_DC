@@ -1,6 +1,6 @@
 import math
 import tensorflow as tf
-import parse_image_seg
+import parse_image_seg2 as parse_image_seg
 import nearest_neighbor
 import numpy as np
 
@@ -166,7 +166,7 @@ class NeuralNet(object):
 
             test_pred_eval = self.test_prediction.eval(feed_dict={self.keep_prob_ph : 1})
             network_acc = self.accuracy(test_pred_eval, test_labels)
-            print('Test accuracy of the network classifier: %.3f' % network_acc)
+            print('Test accuracy: %.3f' % network_acc)
         return self.dataset.get_test_set(), (np.argmax(self.dataset.get_test_labels(), 1) + 1), network_acc, test_pred_eval
 
     def get_mini_batch(self):
@@ -238,13 +238,25 @@ class NeuralNet(object):
         self.learning_rate_ph = tf.placeholder(tf.float32)
 
 if __name__ == '__main__':
-    FILENAME_TRAIN = r'datasets/image-segmentation/segmentation.data'
-    FILENAME_TEST = r'datasets/image-segmentation/segmentation.test'
+    # FILENAME_TRAIN = r'datasets/image-segmentation/segmentation.data'
+    # FILENAME_TEST = r'datasets/image-segmentation/segmentation.test'
+    # assert_values_flag = True
+    # dataset_dict = {'name': 'image_segmentation', 'file_names': (FILENAME_TRAIN, FILENAME_TEST),
+    #                 'assert_values_flag': assert_values_flag, 'validation_train_ratio': 0.1,
+    #                 'test_alldata_ratio' : 0.01}
+    # assert(type(dataset_dict['test_alldata_ratio']) == float and type(dataset_dict['validation_train_ratio'] == float))
+    FILENAME_DATA = r'/home/a/Downloads/UCI_from_Michael/data/image-segmentation/image-segmentation_py.dat'
+    FILENAME_LABELS = r'/home/a/Downloads/UCI_from_Michael/data/image-segmentation/labels_py.dat'
+    # FILENAME_TEST = r'datasets/image-segmentation/segmentation.test'
+    FILENAME_INDEXES_TEST = r'/home/a/Downloads/UCI_from_Michael/data/image-segmentation/folds_py.dat'
+    FILENAME_VALIDATION_INDEXES = r'/home/a/Downloads/UCI_from_Michael/data/image-segmentation/validation_folds_py.dat'
     assert_values_flag = True
-    dataset_dict = {'name': 'image_segmentation', 'file_names': (FILENAME_TRAIN, FILENAME_TEST),
-                    'assert_values_flag': assert_values_flag, 'validation_train_ratio': 0.1,
-                    'test_alldata_ratio' : 0.01}
-    assert(type(dataset_dict['test_alldata_ratio']) == float and type(dataset_dict['validation_train_ratio'] == float))
+    dataset_dict = {'name': 'image_segmentation',
+                    'file_names': (FILENAME_DATA, FILENAME_LABELS, FILENAME_INDEXES_TEST, FILENAME_VALIDATION_INDEXES),
+                    'assert_values_flag': assert_values_flag,
+                    'validation_train_ratio': 5.0,
+                    'test_alldata_ratio': 300.0 / 330}
+
     # TODO: add support for different dropout rates in different layers
     keep_prob = 0.5
     #depth of 5
