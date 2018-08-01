@@ -10,7 +10,7 @@ class NeuralNet(object):
         assert(len(dropout_hidden_list) == len(hidden_size_list))
         # No dropout allowed in the last layer
         self.dropout_l = dropout_hidden_list
-        self.layer_size_l = hidden_size_list
+        self.hidden_size_list = hidden_size_list
         self.reshuffle_flag = True
         self.learning_rate = 0.01
         self.learning_rate_update_at_epoch = 200
@@ -25,7 +25,9 @@ class NeuralNet(object):
     def build_model(self):
         T, D = self.dataset.get_dimensions()
         num_labels = self.dataset.get_num_of_labels()
-        # for classification layer
+
+        self.layer_size_l = self.hidden_size_list
+        # Add another layer for classification
         self.layer_size_l.append(num_labels)
 
         batch_size = 20
@@ -37,33 +39,7 @@ class NeuralNet(object):
             self.tf_valid_dataset = tf.constant(self.dataset.get_validation_set())
         tf_test_dataset = tf.constant(self.dataset.get_test_set())
 
-        self.set_params()
-        # TODO: delete
-        # layer2_weights = tf.get_variable('layer2_weights', shape=[self.layer_size, self.layer_size], dtype=tf.float32, initializer=he_init)
-        # layer2_biases = tf.get_variable('layer2_bias', shape=[self.layer_size], dtype=tf.float32, initializer=tf.zeros_initializer())
-        #
-        # layer3_weights = tf.get_variable('layer3_weights', shape=[self.layer_size, self.layer_size], dtype=tf.float32, initializer=he_init)
-        # layer3_biases = tf.get_variable('layer3_bias', shape=[self.layer_size], dtype=tf.float32, initializer=tf.zeros_initializer())
-        #
-        # layer4_weights = tf.get_variable('layer4_weights', shape=[self.layer_size, num_labels], dtype=tf.float32, initializer=he_init)
-        # layer4_biases = tf.get_variable('layer4_bias', shape=[num_labels], dtype=tf.float32, initializer=tf.zeros_initializer())
-
-
-
-        # Model.
-        # def model(data):
-        #     hidden_no_relu = tf.matmul(data, layer1_weights) + layer1_biases
-        #     hidden = tf.nn.relu(hidden_no_relu)
-        #
-        #     hidden_no_relu = tf.matmul(hidden, layer2_weights) + layer2_biases
-        #     hidden = tf.nn.relu(hidden_no_relu)
-        #
-        #     hidden_no_relu = tf.matmul(hidden, layer3_weights) + layer3_biases
-        #     hidden = tf.nn.relu(hidden_no_relu)
-        #     drop_out = tf.nn.dropout(hidden, self.keep_prob_ph)
-        #
-        #     output = tf.matmul(drop_out, layer4_weights) + layer4_biases
-        #     return output
+        self.set_architecture_variables()
 
         # Training computation.
         # Predictions for the training, validation, and test data.
@@ -86,26 +62,35 @@ class NeuralNet(object):
         # Optimizer.
         self.optimizer = self.build_optimizer(self.learning_rate_ph)
 
-    def set_params(self):
-        # He. initalizer AKA "MSRA initialization"
-        he_init = tf.contrib.layers.variance_scaling_initializer(factor=2.0, mode='FAN_IN', uniform=False, seed=None, dtype=tf.float32)
+    def set_architecture_variables(self, weights_init_type="He"):
+        if weights_init_type == "He":
+            # He. initializer AKA "MSRA initialization"
+            weights_init = tf.contrib.layers.variance_scaling_initializer(factor=2.0, mode='FAN_IN', uniform=False, seed=None, dtype=tf.float32)
+        elif weights_init_type == "Xavier":
+            # Xavier initializer - not exactly because we only look at the input size(FAN_IN) and not the output size and
+            # it is random distrbution and not uniform.
+            # weights_init = tf.random_normal_initializer(stddev=1/np.sqrt(shape[1]))
+            weights_init = tf.contrib.layers.variance_scaling_initializer(factor=1.0, mode='FAN_IN', uniform=False, seed=None, dtype=tf.float32)
+        else:
+            assert 0
         self.weights_l = []
         self.biases_l = []
 
         # first layer parameters
-        self.weights_l.append(tf.get_variable('layer1_weights', shape=[self.dataset.get_dimensions()[0], self.layer_size_l[0]], dtype=tf.float32,
-                                          initializer=he_init))
+        self.weights_l.append(tf.get_variable('layer1_weights', shape=[self.dataset.get_dimensions()[0], self.layer_size_l[0]],
+                                              dtype=tf.float32, initializer=weights_init))
         self.biases_l.append(tf.get_variable('layer1_bias', shape=[self.layer_size_l[0]], dtype=tf.float32,
                                          initializer=tf.zeros_initializer()))
 
         for i in range(1, len(self.layer_size_l)):
             self.weights_l.append(tf.get_variable('layer{}_weights'.format(i+1), shape=[self.layer_size_l[i-1],self.layer_size_l[i]],
-                                             dtype=tf.float32, initializer=he_init))
+                                             dtype=tf.float32, initializer=weights_init))
             self.biases_l.append(tf.get_variable('layer{}_bias'.format(i+1), shape=[self.layer_size_l[i]], dtype=tf.float32,
                                             initializer=tf.zeros_initializer()))
         # I want to have the weights explictly so don't use dense
         # input = tf.layers.dense(self.tf_train_minibatch, self.layer_size, kernel_initializer=he_init,
         #                         activation=self._activation, name='layer{}'.format(i + 1))
+
 
     def model(self, data):
         def _add_dropout_layer(op_layer_index, layer_index):
@@ -250,8 +235,8 @@ if __name__ == '__main__':
     # TODO: add support for different dropout rates in different layers
     keep_prob = 0.5
     #depth of 5
-    hidden_size_list = [256,256,256]
-    dropout_hidden_list = [0, 0, keep_prob]
+    hidden_size_list = [256, 256, 256, 256]
+    dropout_hidden_list = [0, 0, 0, keep_prob]
     #depth of 8
     # hidden_size_list = [256,256,256,256,256,256,256]
     # dropout_hidden_list = [0, 0, 0, 0, 0, 0, keep_prob]
