@@ -13,7 +13,7 @@ def set_a_logger(log_name='log', console_level=logging.DEBUG, file_level=logging
         ch = logging.StreamHandler()
         ch.setLevel(console_level)
 
-        fh = logging.FileHandler(log_name)
+        fh = logging.FileHandler(log_name + ".log")
         fh.setLevel(file_level)
         # create formatter
         formatter = logging.Formatter('%(levelname)s - %(message)s')
@@ -35,11 +35,11 @@ def set_a_logger(log_name='log', console_level=logging.DEBUG, file_level=logging
 
 
 if __name__ == '__main__':
-    filename = os.path.join("./Logs", 'log.log')
+    filename = os.path.join("./Logs", 'log')
     logger = set_a_logger(filename)
     logger.debug('log')
     t = str(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-    filename = os.path.join("./Logs", 'evaluate' + t + '.log')
+    filename = os.path.join("./Logs", 'evaluate' + t)
     logger2 = set_a_logger(filename)
     logger2.debug('log2')
 
