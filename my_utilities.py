@@ -55,26 +55,23 @@ def set_a_logger(log_name='log', dirpath="./", filename=None, console_level=logg
         logger.addHandler(fh)
 
     # 'application' code
-    logger.debug('debug message is shown')
-    logger.info('info message  is shown')
-    logger.warn('warn message is shown')
-    logger.error('error message is shown')
+    logger.critical('Logging level inside file is: {}'.format(logging._levelNames[file_level]))
     return logger
 
 
 if __name__ == '__main__':
     # Test the logger wrap function - write inside log.log
-    logger_name = 'log'
+    logger_name = 'example'
     dirpath = "./Logs"
     logger = set_a_logger(logger_name, dirpath)
     logger.debug('log')
 
     # Test the logger wrap function - create a different log file and write inside it
-    logger_name = 'log2'
+    logger_name = 'example2'
     logger2 = set_a_logger(logger_name, dirpath)
     logger2.debug('log2')
 
     # Test that getting the logger from different module is possible by writing to the same file the logger used.
     logger2_diff_module = set_a_logger(logger_name)
-    logger2_diff_module.debug('logger2_diff_module')
+    logger2_diff_module.debug('example2_diff_module')
 

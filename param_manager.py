@@ -44,6 +44,9 @@ class ModelParams(Params):
         dict['keep prob for dropout'] = 0.5
         dict['number of layers'] = 4
         dict['activation'] = 'RELU'
+        dict['random seeds'] = 1
+        dict['tf seed'] = 230
+        dict['np seed'] = 100
         return dict
 
 

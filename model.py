@@ -3,14 +3,23 @@ import tensorflow as tf
 import parse_image_seg2 as parse_image_seg
 import nearest_neighbor
 import numpy as np
+import argparse
+import my_utilities
+import param_manager
+import os
+import random
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--params_dir', default='./Params', help="directory containing .json file detailing the model params")
 
 class NeuralNet(object):
-    def __init__(self, hidden_size_list, dropout_hidden_list):
+    def __init__(self, hidden_size_list, dropout_hidden_list, logger):
         # Make sure the dropout list size is equal to the hidden list size, both of them ignore the last layer
         assert(len(dropout_hidden_list) == len(hidden_size_list))
         # No dropout allowed in the last layer
         self.dropout_l = dropout_hidden_list
         self.hidden_size_list = hidden_size_list
+        self.logger = logger
         self.reshuffle_flag = True
         self.learning_rate = 0.01
         self.learning_rate_update_at_epoch = 200
@@ -239,6 +248,22 @@ class NeuralNet(object):
         self.learning_rate_ph = tf.placeholder(tf.float32)
 
 if __name__ == '__main__':
+
+    logger = my_utilities.set_a_logger('log', dirpath="./Logs")
+    logger.info('Start logging')
+    # Load the parameters from json file
+    args = parser.parse_args()
+    json_path = os.path.join(args.params_dir, 'model_params_template.json')
+    assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
+    params = param_manager.ModelParams(json_path)
+
+    if params.dict['random seeds'] == 1:
+        params.dict['tf seed'] = random.randint(1, 2**31)
+        params.dict['np seed'] = random.randint(1, 2**31)
+
+    tf.set_random_seed(params.dict['tf seed'])
+    np.random.seed(params.dict['np seed'])
+
     # FILENAME_TRAIN = r'datasets/image-segmentation/segmentation.data'
     # FILENAME_TEST = r'datasets/image-segmentation/segmentation.test'
     # assert_values_flag = True
@@ -270,7 +295,7 @@ if __name__ == '__main__':
     # hidden_size_list = [256] * 15
     # dropout_hidden_list = [0] *14 +[keep_prob]
 
-    model = NeuralNet(hidden_size_list, dropout_hidden_list)
+    model = NeuralNet(hidden_size_list, dropout_hidden_list, logger)
     model.get_dataset(dataset_dict)
     # arabic_model.dataset.pca_scatter_plot(arabic_model.dataset.test_set)
     # print('1NN Baseline accuarcy: %.3f' % arabic_model.run_baseline(arabic_model.dataset.train_set,
