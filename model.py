@@ -109,7 +109,7 @@ class NeuralNet(object):
     def model(self, data):
         def _add_dropout_layer(op_layer_index, layer_index):
             if self.dropout_l[layer_index] != 0:
-                print "Added dropout layer after layer {} with dropout of {}".format(layer_index+1, self.dropout_l[layer_index])
+                logger.info("Added dropout layer after layer {} with dropout of {}".format(layer_index+1, self.dropout_l[layer_index]))
                 layer_l.append(tf.nn.dropout(layer_l[op_layer_index - 1], self.keep_prob_ph))
                 return 1
             return 0
@@ -142,7 +142,7 @@ class NeuralNet(object):
         self.sess = tf.Session()
         self.sess.run(tf.global_variables_initializer())
         with self.sess.as_default():
-            print('Initialized')
+            logger.info('Initialized')
             self.mini_batch_step = 0
             while self.epoch < 500:
                 step += 1
@@ -153,30 +153,30 @@ class NeuralNet(object):
                     [self.optimizer, self.loss, self.train_prediction], feed_dict=feed_dict)
                 if (prev_epoch != self.epoch):
                     prev_epoch = self.epoch
-                    print('batch_labels: {}'.format(np.argmax(batch_labels, 1)))
-                    print('predictions: {}'.format(np.argmax(predictions, 1)))
-                    print('Minibatch loss at epoch %d: %f' % (self.epoch, l))
-                    print('Minibatch accuracy: %.3f' % self.accuracy(predictions, batch_labels))
+                    logger.info('batch_labels: {}'.format(np.argmax(batch_labels, 1)))
+                    logger.info('predictions: {}'.format(np.argmax(predictions, 1)))
+                    logger.info('Minibatch loss at epoch %d: %f' % (self.epoch, l))
+                    logger.info('Minibatch accuracy: %.3f' % self.accuracy(predictions, batch_labels))
                     # self.eval_validation_accuracy()
                     self.eval_model()
 
         self.dataset.count_classes_for_all_datasets()
         #self.dataset.count_classes(batch_labels)
-        print "Training stopped at epoch: %i" % self.epoch
+        logger.info("Training stopped at epoch: %i" % self.epoch)
 
 
     def eval_model(self):
         assert ~np.array_equal(self.initial_train_labels, self.dataset.get_train_labels())
         test_labels = self.dataset.get_test_labels()
         with self.sess.as_default():
-            print('Train accuracy: %.3f' % self.accuracy(
+            logger.info('Train accuracy: %.3f' % self.accuracy(
                 self.train_prediction_full_set.eval(feed_dict={self.keep_prob_ph : 1}), self.initial_train_labels))
 
             self.eval_validation_accuracy()
 
             test_pred_eval = self.test_prediction.eval(feed_dict={self.keep_prob_ph : 1})
             network_acc = self.accuracy(test_pred_eval, test_labels)
-            print('Test accuracy: %.3f' % network_acc)
+            logger.info('Test accuracy: %.3f' % network_acc)
         return self.dataset.get_test_set(), (np.argmax(self.dataset.get_test_labels(), 1) + 1), network_acc, test_pred_eval
 
     def get_mini_batch(self):
@@ -195,12 +195,12 @@ class NeuralNet(object):
     def new_epoch_update(self):
         self.epoch += 1
         if self.learning_rate_update_at_epoch == self.epoch:
-            print "Update learning rate to {} in epoch {}".format(self.learning_rate_updated, self.epoch)
+            logger.info("Update learning rate to {} in epoch {}".format(self.learning_rate_updated, self.epoch))
             self.learning_rate = self.learning_rate_updated
         if self.reshuffle_flag:
             self.dataset.re_shuffle()
         else:
-            print "reshuffle is OFF"
+            logger.info("reshuffle is OFF")
 
     @staticmethod
     def accuracy(predictions, labels):
@@ -209,10 +209,10 @@ class NeuralNet(object):
 
     def eval_validation_accuracy(self):
         if self.dataset.validation_set_exist:
-            print('Validation accuracy: %.3f' % self.accuracy(
+            logger.info('Validation accuracy: %.3f' % self.accuracy(
                 self.valid_prediction.eval(feed_dict={self.keep_prob_ph : 1}), self.dataset.get_validation_labels()))
         else:
-            print 'Validation accuracy: Nan - no validation set, IGNORE'
+            logger.info('Validation accuracy: Nan - no validation set, IGNORE')
 
     def run_baseline(self, train_set, train_labels, test_set, test_labels):
         nn = nearest_neighbor.NearestNeighbor()
@@ -298,7 +298,7 @@ if __name__ == '__main__':
     model = NeuralNet(hidden_size_list, dropout_hidden_list, logger)
     model.get_dataset(dataset_dict)
     # arabic_model.dataset.pca_scatter_plot(arabic_model.dataset.test_set)
-    # print('1NN Baseline accuarcy: %.3f' % arabic_model.run_baseline(arabic_model.dataset.train_set,
+    # logger.info('1NN Baseline accuarcy: %.3f' % arabic_model.run_baseline(arabic_model.dataset.train_set,
     #                                                                 arabic_model.dataset.train_labels,
     #                                                                 arabic_model.dataset.test_set,
     #                                                                 arabic_model.dataset.test_labels))
