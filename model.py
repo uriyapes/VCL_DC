@@ -16,6 +16,7 @@ class NeuralNet(object):
         self.learning_rate_update_at_epoch = 200
         self.learning_rate_updated = 1e-3
 
+    # TODO: remove get_dataset from this class, this should be taken care in runner script (in our case the main) and sent to the NeuralNet when init.
     def get_dataset(self, dataset_dict):
         if dataset_dict['name'] == "image_segmentation":
             self.dataset = parse_image_seg.Dataset(dataset_dict)

@@ -1,8 +1,6 @@
 import os
 import logging
 from datetime import datetime
-import json
-import numpy as np
 
 
 def set_a_logger(log_name='log', dirpath="./", filename=None, console_level=logging.DEBUG, file_level=logging.DEBUG):
@@ -16,7 +14,7 @@ def set_a_logger(log_name='log', dirpath="./", filename=None, console_level=logg
     :param log_name: The logger name, use the same name from different modules to write to the same file. In case no filename
                       is given the log_name will used to create the filename (date and .log are added automatically).
     :param dirpath: the logs directory.
-    :param filename: the name of the file without any suffix.
+    :param filename: if value is specified the name of the file will be filename without any suffix.
     :param console_level: logging level to the console (screen).
     :param file_level: logging level to the file.
     :return: a logger object.
@@ -64,49 +62,6 @@ def set_a_logger(log_name='log', dirpath="./", filename=None, console_level=logg
     return logger
 
 
-class Params(object):
-    """Class that loads hyperparameters from a json file.
-    Example:
-    ```
-    params = Params(json_path)
-    print(params.learning_rate)
-    params.learning_rate = 0.5  # change the value of learning_rate in params
-    ```
-    """
-
-    def __init__(self, json_path):
-        self.update(json_path)
-
-    def save(self, json_path):
-        """Saves parameters to json file"""
-        with open(json_path, 'w') as f:
-            json.dump(self.__dict__, f, indent=4)
-
-    def update(self, json_path):
-        """Loads parameters from json file"""
-        with open(json_path) as f:
-            params = json.load(f)
-            self.__dict__.update(params)
-
-    @property
-    def dict(self):
-        """Gives dict-like access to Params instance by `params.dict['learning_rate']`"""
-        return self.__dict__
-
-
-
-def save_dict_to_json(d, json_path):
-    """Saves dict of floats in json file
-    Args:
-        d: (dict) of float-castable values (np.float, int, float, etc.)
-        json_path: (string) path to json file
-    """
-    with open(json_path, 'w') as f:
-        # We need to convert the values to float for json (it doesn't accept np.array, np.float, )
-        d = {k: float(v) for k, v in d.items()}
-        json.dump(d, f, indent=4)
-
-
 if __name__ == '__main__':
     # Test the logger wrap function - write inside log.log
     logger_name = 'log'
@@ -123,15 +78,3 @@ if __name__ == '__main__':
     logger2_diff_module = set_a_logger(logger_name)
     logger2_diff_module.debug('logger2_diff_module')
 
-    # Test save_dict_to_json function
-    json_path = os.path.join("./Logs", 'json')
-    d = {'a' : 3, 'b' : np.array([2.3233554])}
-    save_dict_to_json(d,  json_path)
-
-    # Test the params class
-    params = Params(json_path)
-    logger2.critical(params.b)
-    params.b = 2
-    params.save(json_path)
-
-    params.save(json_path + "2")
