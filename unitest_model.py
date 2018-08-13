@@ -1,7 +1,10 @@
 from model import NeuralNet
+import parse_image_seg2 as parse_image_seg
 import param_manager
 import my_utilities
-
+import tensorflow as tf
+from tensorflow.python import pywrap_tensorflow
+import numpy as np
 import argparse
 import unittest
 import random
@@ -45,12 +48,25 @@ class TestModel(unittest.TestCase):
         hidden_size_list = [256, 256, 256, 256]
         dropout_hidden_list = [0, 0, 0, keep_prob]
 
-        model = NeuralNet(hidden_size_list, dropout_hidden_list, self.logger)
-        model.get_dataset(dataset_dict)
+        dataset = parse_image_seg.Dataset(dataset_dict)
+        model = NeuralNet(hidden_size_list, dropout_hidden_list, dataset, self.logger)
 
         model.build_model()
         model.train_model()
         test_set, test_labels, network_acc, test_pred_eval = model.eval_model()
+
+        checkpoint_path = "./results/unitest1.ckpt"
+        with model.sess.as_default() as sess:
+            sess.run(model.isTrain_node.assign(True))
+            reader = pywrap_tensorflow.NewCheckpointReader(checkpoint_path)
+            var_to_shape_map = reader.get_variable_to_shape_map()
+            assert(len(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)) == len(var_to_shape_map))
+            for key in var_to_shape_map:
+                valid_tensor_value = reader.get_tensor(key)
+                curr_tensor_var = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=key)[0]
+                curr_tensor_value = sess.run(curr_tensor_var)
+                # tf.get_tensor_by_name(key+":0") #not working for some reason, maybe version issues?
+                assert(np.array_equal(curr_tensor_value, valid_tensor_value))
 
 
 

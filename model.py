@@ -1,7 +1,6 @@
 import math
 import tensorflow as tf
 from tensorflow.contrib.layers.python.layers import batch_norm
-from tensorflow.python import pywrap_tensorflow
 import parse_image_seg2 as parse_image_seg
 import nearest_neighbor
 import numpy as np
@@ -16,7 +15,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--params_dir', default='./Params', help="directory containing .json file detailing the model params")
 
 class NeuralNet(object):
-    def __init__(self, hidden_size_list, dropout_hidden_list, logger):
+    def __init__(self, hidden_size_list, dropout_hidden_list, dataset, logger):
         # Make sure the dropout list size is equal to the hidden list size, both of them ignore the last layer
         assert(len(dropout_hidden_list) == len(hidden_size_list))
         # No dropout allowed in the last layer
@@ -27,13 +26,7 @@ class NeuralNet(object):
         self.learning_rate = 0.01
         self.learning_rate_update_at_epoch = 200
         self.learning_rate_updated = 1e-3
-
-    # TODO: remove get_dataset from this class, this should be taken care in runner script (in our case the main) and sent to the NeuralNet when init.
-    def get_dataset(self, dataset_dict):
-        if dataset_dict['name'] == "image_segmentation":
-            self.dataset = parse_image_seg.Dataset(dataset_dict)
-        else:
-            assert(0)
+        self.dataset = dataset
 
     def build_model(self):
         T, D = self.dataset.get_dimensions()
@@ -201,7 +194,6 @@ class NeuralNet(object):
                     self.eval_model()
                     self.sess.run(self.isTrain_node.assign(True))
             # self.save_variables('./results/unitest1')
-            self.unitest_tf_vars(self.sess, checkpoint_path="./results/unitest1.ckpt")
         self.dataset.count_classes_for_all_datasets()
         #self.dataset.count_classes(batch_labels)
         self.logger.info("Training stopped at epoch: %i" % self.epoch)
@@ -305,19 +297,6 @@ class NeuralNet(object):
         self.tf_saver.restore(self.sess, filename)
 
     @staticmethod
-    def unitest_tf_vars(sess, checkpoint_path):
-
-        reader = pywrap_tensorflow.NewCheckpointReader(checkpoint_path)
-        var_to_shape_map = reader.get_variable_to_shape_map()
-        assert(len(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)) == len(var_to_shape_map))
-        for key in var_to_shape_map:
-            valid_tensor_value = reader.get_tensor(key)
-            curr_tensor_var = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=key)[0]
-            curr_tensor_value = sess.run(curr_tensor_var)
-            # tf.get_tensor_by_name(key+":0")
-            assert(np.array_equal(curr_tensor_value, valid_tensor_value))
-
-    @staticmethod
     def set_seeds(tf_seed, np_seed):
         assert(type(tf_seed) == int)
         assert (type(np_seed) == int)
@@ -374,9 +353,9 @@ if __name__ == '__main__':
     #depth of 16
     # hidden_size_list = [256] * 15
     # dropout_hidden_list = [0] *14 +[keep_prob]
+    dataset = parse_image_seg.Dataset(dataset_dict)
+    model = NeuralNet(hidden_size_list, dropout_hidden_list, dataset, logger)
 
-    model = NeuralNet(hidden_size_list, dropout_hidden_list, logger)
-    model.get_dataset(dataset_dict)
     # arabic_model.dataset.pca_scatter_plot(arabic_model.dataset.test_set)
     # logger.info('1NN Baseline accuarcy: %.3f' % arabic_model.run_baseline(arabic_model.dataset.train_set,
     #                                                                 arabic_model.dataset.train_labels,
