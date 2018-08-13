@@ -1,5 +1,7 @@
 import math
 import tensorflow as tf
+from tensorflow.contrib.layers.python.layers import batch_norm
+from tensorflow.python import pywrap_tensorflow
 import parse_image_seg2 as parse_image_seg
 import nearest_neighbor
 import numpy as np
@@ -7,6 +9,7 @@ import argparse
 import my_utilities
 import param_manager
 import os
+from datetime import datetime
 import random
 
 parser = argparse.ArgumentParser()
@@ -49,7 +52,7 @@ class NeuralNet(object):
             self.tf_valid_dataset = tf.constant(self.dataset.get_validation_set())
         tf_test_dataset = tf.constant(self.dataset.get_test_set())
 
-        self.set_architecture_variables(weights_init_type="Xavier")
+        self.set_architecture_variables(weights_init_type="SELU")
 
         # Training computation.
         # Predictions for the training, validation, and test data.
@@ -76,9 +79,8 @@ class NeuralNet(object):
         if weights_init_type == "He":
             # He. initializer AKA "MSRA initialization"
             weights_init = tf.contrib.layers.variance_scaling_initializer(factor=2.0, mode='FAN_IN', uniform=False, seed=None, dtype=tf.float32)
-        elif weights_init_type == "Xavier":
-            # Xavier initializer - not exactly because we only look at the input size(FAN_IN) and not the output size and
-            # it is random distrbution and not uniform.
+        elif weights_init_type == "SELU":
+            # SELU initializer https://github.com/deeplearning4j/deeplearning4j/issues/3739 like MSRA but with factor=1
             # weights_init = tf.random_normal_initializer(stddev=1/np.sqrt(shape[1]))
             # weights_init = tf.contrib.layers.variance_scaling_initializer(factor=1.0, mode='FAN_IN', uniform=False, seed=None, dtype=tf.float32)
             pass
@@ -88,28 +90,35 @@ class NeuralNet(object):
         self.biases_l = []
 
         # first layer parameters
-        # TODO: move the initializer back to the if statment in the start of the method.
-        weights_init = tf.random_normal_initializer(stddev=1 / np.sqrt(self.dataset.get_dimensions()[0]))
-        self.weights_l.append(tf.get_variable('layer1_weights', shape=[self.dataset.get_dimensions()[0], self.layer_size_l[0]],
-                                              dtype=tf.float32, initializer=weights_init))
-        self.biases_l.append(tf.get_variable('layer1_bias', shape=[self.layer_size_l[0]], dtype=tf.float32,
-                                         initializer=tf.zeros_initializer()))
+        with tf.variable_scope("Layer_0"):
+            # TODO: move the initializer back to the if statment in the start of the method.
+            weights_init = tf.random_normal_initializer(stddev=1 / np.sqrt(self.dataset.get_dimensions()[0]))
+            self.weights_l.append(tf.get_variable('weights', shape=[self.dataset.get_dimensions()[0], self.layer_size_l[0]],
+                                                  dtype=tf.float32, initializer=weights_init))
+            self.biases_l.append(tf.get_variable('bias', shape=[self.layer_size_l[0]], dtype=tf.float32,
+                                             initializer=tf.zeros_initializer()))
+            tf.add_to_collection('l2_loss', (tf.nn.l2_loss(self.weights_l[0])))
 
         weights_init = tf.random_normal_initializer(stddev=1 / np.sqrt(self.layer_size_l[0]))
         for i in range(1, len(self.layer_size_l)):
-            self.weights_l.append(tf.get_variable('layer{}_weights'.format(i+1), shape=[self.layer_size_l[i-1],self.layer_size_l[i]],
-                                             dtype=tf.float32, initializer=weights_init))
-            self.biases_l.append(tf.get_variable('layer{}_bias'.format(i+1), shape=[self.layer_size_l[i]], dtype=tf.float32,
-                                            initializer=tf.zeros_initializer()))
+            with tf.variable_scope("Layer_{}".format(i)):
+                self.weights_l.append(tf.get_variable('weights', shape=[self.layer_size_l[i-1],self.layer_size_l[i]],
+                                                 dtype=tf.float32, initializer=weights_init))
+                self.biases_l.append(tf.get_variable('bias', shape=[self.layer_size_l[i]], dtype=tf.float32,
+                                                initializer=tf.zeros_initializer()))
+                tf.add_to_collection('l2_loss', (tf.nn.l2_loss(self.weights_l[i])))
         # I want to have the weights explictly so don't use dense
         # input = tf.layers.dense(self.tf_train_minibatch, self.layer_size, kernel_initializer=he_init,
         #                         activation=self._activation, name='layer{}'.format(i + 1))
+
+        self.isTrain_node = tf.Variable(False, name='istrainvar', trainable=False)
+        tf.add_to_collection('istrainvar', self.isTrain_node)
 
 
     def model(self, data):
         def _add_dropout_layer(op_layer_index, layer_index):
             if self.dropout_l[layer_index] != 0:
-                logger.info("Added dropout layer after layer {} with dropout of {}".format(layer_index+1, self.dropout_l[layer_index]))
+                self.logger.info("Added dropout layer after layer {} with dropout of {}".format(layer_index+1, self.dropout_l[layer_index]))
                 layer_l.append(tf.nn.dropout(layer_l[op_layer_index - 1], self.keep_prob_ph))
                 return 1
             return 0
@@ -120,6 +129,8 @@ class NeuralNet(object):
         layer_index = 0
         op_layer_index = 0
         layer_l.append(tf.nn.relu(tf.matmul(data, self.weights_l[layer_index]) + self.biases_l[layer_index]))
+        # output = self.linear(data, self.weights_l[layer_index], self.biases_l[layer_index], 'Layer_0')
+        # assert layer_l[0] == output
         op_layer_index += 1
         op_layer_index += _add_dropout_layer(op_layer_index, layer_index)
         layer_index += 1
@@ -133,7 +144,35 @@ class NeuralNet(object):
         output = tf.matmul(layer_l[-1], self.weights_l[-1]) + self.biases_l[-1]
         return output
 
+    # def linear(input_, output_size, sample_size, eps, scope=None, bn=False, activation=None, hidden=True):
+    def linear(self, input_to_layer, weights, bias, scope, dropout=None, sample_size=None, bn=False, activation=tf.nn.relu, hidden=False):
+
+        with tf.variable_scope(scope):
+            output = tf.matmul(input_to_layer, weights) + bias
+            if bn:
+                output = self.batchnorm(output, scope=scope)
+            if hidden:
+                # stability_loss(output, sample_size)
+                pass
+            if activation:
+                output = activation(output)
+            if dropout:
+                tf.nn.dropout(output, self.keep_prob_ph)
+
+            return output
+
+    def batchnorm(inputT, is_training=False, scope=None):
+        # Note: is_training is tf.placeholder(tf.bool) type
+        is_training = tf.get_collection('istrainvar')[0]
+        return tf.cond(is_training,
+                       lambda: batch_norm(inputT, is_training=True,
+                                          center=True, scale=True, decay=0.9, updates_collections=None, scope=scope),
+                       lambda: batch_norm(inputT, is_training=False,
+                                          center=True, scale=True, decay=0.9, updates_collections=None, scope=scope,
+                                          reuse=True))
+
     def train_model(self):
+        self.tf_saver = tf.train.Saver()
         self.epoch = 0
         prev_epoch = -1
         step = 0
@@ -142,9 +181,10 @@ class NeuralNet(object):
         self.sess = tf.Session()
         self.sess.run(tf.global_variables_initializer())
         with self.sess.as_default():
-            logger.info('Initialized')
+            self.logger.info('Initialized')
             self.mini_batch_step = 0
-            while self.epoch < 500:
+            while self.epoch < 5:
+
                 step += 1
                 batch_data, batch_labels = self.get_mini_batch()
                 feed_dict = {self.tf_train_minibatch : batch_data, self.tf_train_labels : batch_labels,
@@ -153,30 +193,33 @@ class NeuralNet(object):
                     [self.optimizer, self.loss, self.train_prediction], feed_dict=feed_dict)
                 if (prev_epoch != self.epoch):
                     prev_epoch = self.epoch
-                    logger.info('batch_labels: {}'.format(np.argmax(batch_labels, 1)))
-                    logger.info('predictions: {}'.format(np.argmax(predictions, 1)))
-                    logger.info('Minibatch loss at epoch %d: %f' % (self.epoch, l))
-                    logger.info('Minibatch accuracy: %.3f' % self.accuracy(predictions, batch_labels))
+                    self.logger.info('batch_labels: {}'.format(np.argmax(batch_labels, 1)))
+                    self.logger.info('predictions: {}'.format(np.argmax(predictions, 1)))
+                    self.logger.info('Minibatch loss at epoch %d: %f' % (self.epoch, l))
+                    self.logger.info('Minibatch accuracy: %.3f' % self.accuracy(predictions, batch_labels))
                     # self.eval_validation_accuracy()
                     self.eval_model()
-
+                    self.sess.run(self.isTrain_node.assign(True))
+            # self.save_variables('./results/unitest1')
+            self.unitest_tf_vars(self.sess, checkpoint_path="./results/unitest1.ckpt")
         self.dataset.count_classes_for_all_datasets()
         #self.dataset.count_classes(batch_labels)
-        logger.info("Training stopped at epoch: %i" % self.epoch)
+        self.logger.info("Training stopped at epoch: %i" % self.epoch)
 
 
     def eval_model(self):
         assert ~np.array_equal(self.initial_train_labels, self.dataset.get_train_labels())
         test_labels = self.dataset.get_test_labels()
         with self.sess.as_default():
-            logger.info('Train accuracy: %.3f' % self.accuracy(
+            self.sess.run(self.isTrain_node.assign(False))
+            self.logger.info('Train accuracy: %.3f' % self.accuracy(
                 self.train_prediction_full_set.eval(feed_dict={self.keep_prob_ph : 1}), self.initial_train_labels))
 
             self.eval_validation_accuracy()
 
             test_pred_eval = self.test_prediction.eval(feed_dict={self.keep_prob_ph : 1})
             network_acc = self.accuracy(test_pred_eval, test_labels)
-            logger.info('Test accuracy: %.3f' % network_acc)
+            self.logger.info('Test accuracy: %.3f' % network_acc)
         return self.dataset.get_test_set(), (np.argmax(self.dataset.get_test_labels(), 1) + 1), network_acc, test_pred_eval
 
     def get_mini_batch(self):
@@ -195,12 +238,12 @@ class NeuralNet(object):
     def new_epoch_update(self):
         self.epoch += 1
         if self.learning_rate_update_at_epoch == self.epoch:
-            logger.info("Update learning rate to {} in epoch {}".format(self.learning_rate_updated, self.epoch))
+            self.logger.info("Update learning rate to {} in epoch {}".format(self.learning_rate_updated, self.epoch))
             self.learning_rate = self.learning_rate_updated
         if self.reshuffle_flag:
             self.dataset.re_shuffle()
         else:
-            logger.info("reshuffle is OFF")
+            self.logger.info("reshuffle is OFF")
 
     @staticmethod
     def accuracy(predictions, labels):
@@ -209,10 +252,10 @@ class NeuralNet(object):
 
     def eval_validation_accuracy(self):
         if self.dataset.validation_set_exist:
-            logger.info('Validation accuracy: %.3f' % self.accuracy(
+            self.logger.info('Validation accuracy: %.3f' % self.accuracy(
                 self.valid_prediction.eval(feed_dict={self.keep_prob_ph : 1}), self.dataset.get_validation_labels()))
         else:
-            logger.info('Validation accuracy: Nan - no validation set, IGNORE')
+            self.logger.info('Validation accuracy: Nan - no validation set, IGNORE')
 
     def run_baseline(self, train_set, train_labels, test_set, test_labels):
         nn = nearest_neighbor.NearestNeighbor()
@@ -247,13 +290,51 @@ class NeuralNet(object):
         self.keep_prob_ph = tf.placeholder(tf.float32)
         self.learning_rate_ph = tf.placeholder(tf.float32)
 
+    def save_variables(self, filename=None):
+        assert hasattr(self, 'sess')
+        if filename:
+            assert type(filename) == str
+            filename = filename + ".ckpt"
+        else:
+            timestamp = "_" + str(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+            filename = "./results/tf_variables_" + timestamp + ".ckpt"
+        self.tf_saver.save(self.sess, filename)
+
+    def load_variables(self, filename):
+        assert hasattr(self, 'sess')
+        self.tf_saver.restore(self.sess, filename)
+
+    @staticmethod
+    def unitest_tf_vars(sess, checkpoint_path):
+
+        reader = pywrap_tensorflow.NewCheckpointReader(checkpoint_path)
+        var_to_shape_map = reader.get_variable_to_shape_map()
+        assert(len(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)) == len(var_to_shape_map))
+        for key in var_to_shape_map:
+            valid_tensor_value = reader.get_tensor(key)
+            curr_tensor_var = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=key)[0]
+            curr_tensor_value = sess.run(curr_tensor_var)
+            # tf.get_tensor_by_name(key+":0")
+            assert(np.array_equal(curr_tensor_value, valid_tensor_value))
+
+    @staticmethod
+    def set_seeds(tf_seed, np_seed):
+        assert(type(tf_seed) == int)
+        assert (type(np_seed) == int)
+        tf.set_random_seed(tf_seed)
+        np.random.seed(np_seed)
+
+
+
+
 if __name__ == '__main__':
 
     logger = my_utilities.set_a_logger('log', dirpath="./Logs")
     logger.info('Start logging')
     # Load the parameters from json file
     args = parser.parse_args()
-    json_path = os.path.join(args.params_dir, 'model_params_template.json')
+    # json_path = os.path.join(args.params_dir, 'model_params_template.json')
+    json_path = os.path.join(args.params_dir, 'unitest_params1.json')
     assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
     params = param_manager.ModelParams(json_path)
 
@@ -261,8 +342,7 @@ if __name__ == '__main__':
         params.dict['tf seed'] = random.randint(1, 2**31)
         params.dict['np seed'] = random.randint(1, 2**31)
 
-    tf.set_random_seed(params.dict['tf seed'])
-    np.random.seed(params.dict['np seed'])
+    NeuralNet.set_seeds(params.dict['tf seed'], int(params.dict['np seed']))
 
     # FILENAME_TRAIN = r'datasets/image-segmentation/segmentation.data'
     # FILENAME_TEST = r'datasets/image-segmentation/segmentation.test'

@@ -47,6 +47,7 @@ class ModelParams(Params):
         dict['random seeds'] = 1
         dict['tf seed'] = 230
         dict['np seed'] = 100
+        dict['number of epochs'] = 500
         return dict
 
 
