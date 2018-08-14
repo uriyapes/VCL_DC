@@ -1,4 +1,3 @@
-import math
 import tensorflow as tf
 from tensorflow.contrib.layers.python.layers import batch_norm
 import parse_image_seg2 as parse_image_seg
@@ -15,7 +14,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--params_dir', default='./Params', help="directory containing .json file detailing the model params")
 
 class NeuralNet(object):
-    def __init__(self, hidden_size_list, dropout_hidden_list, dataset, logger):
+    def __init__(self, hidden_size_list, dropout_hidden_list, dataset, logger, model_params):
         # Make sure the dropout list size is equal to the hidden list size, both of them ignore the last layer
         assert(len(dropout_hidden_list) == len(hidden_size_list))
         # No dropout allowed in the last layer
@@ -27,6 +26,7 @@ class NeuralNet(object):
         self.learning_rate_update_at_epoch = 200
         self.learning_rate_updated = 1e-3
         self.dataset = dataset
+        self.params = model_params.dict
 
     def build_model(self):
         T, D = self.dataset.get_dimensions()
@@ -176,7 +176,7 @@ class NeuralNet(object):
         with self.sess.as_default():
             self.logger.info('Initialized')
             self.mini_batch_step = 0
-            while self.epoch < 5:
+            while self.epoch < self.params['number of epochs']:
 
                 step += 1
                 batch_data, batch_labels = self.get_mini_batch()
@@ -240,7 +240,7 @@ class NeuralNet(object):
     @staticmethod
     def accuracy(predictions, labels):
         assert not np.array_equal(labels, None)
-        return (1.0 * np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1)) / predictions.shape[0])
+        return 1.0 * np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1)) / predictions.shape[0]
 
     def eval_validation_accuracy(self):
         if self.dataset.validation_set_exist:
@@ -312,8 +312,7 @@ if __name__ == '__main__':
     logger.info('Start logging')
     # Load the parameters from json file
     args = parser.parse_args()
-    # json_path = os.path.join(args.params_dir, 'model_params_template.json')
-    json_path = os.path.join(args.params_dir, 'unitest_params1.json')
+    json_path = os.path.join(args.params_dir, 'model_params_template.json')
     assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
     params = param_manager.ModelParams(json_path)
 
@@ -330,17 +329,23 @@ if __name__ == '__main__':
     #                 'assert_values_flag': assert_values_flag, 'validation_train_ratio': 0.1,
     #                 'test_alldata_ratio' : 0.01}
     # assert(type(dataset_dict['test_alldata_ratio']) == float and type(dataset_dict['validation_train_ratio'] == float))
-    FILENAME_DATA = r'/home/a/Downloads/UCI_from_Michael/data/image-segmentation/image-segmentation_py.dat'
-    FILENAME_LABELS = r'/home/a/Downloads/UCI_from_Michael/data/image-segmentation/labels_py.dat'
-    # FILENAME_TEST = r'datasets/image-segmentation/segmentation.test'
-    FILENAME_INDEXES_TEST = r'/home/a/Downloads/UCI_from_Michael/data/image-segmentation/folds_py.dat'
-    FILENAME_VALIDATION_INDEXES = r'/home/a/Downloads/UCI_from_Michael/data/image-segmentation/validation_folds_py.dat'
-    assert_values_flag = True
-    dataset_dict = {'name': 'image_segmentation',
-                    'file_names': (FILENAME_DATA, FILENAME_LABELS, FILENAME_INDEXES_TEST, FILENAME_VALIDATION_INDEXES),
-                    'assert_values_flag': assert_values_flag,
-                    'validation_train_ratio': 5.0,
-                    'test_alldata_ratio': 300.0 / 330}
+
+
+    # FILENAME_DATA = r'/home/a/Downloads/UCI_from_Michael/data/image-segmentation/image-segmentation_py.dat'
+    # FILENAME_LABELS = r'/home/a/Downloads/UCI_from_Michael/data/image-segmentation/labels_py.dat'
+    # # FILENAME_TEST = r'datasets/image-segmentation/segmentation.test'
+    # FILENAME_INDEXES_TEST = r'/home/a/Downloads/UCI_from_Michael/data/image-segmentation/folds_py.dat'
+    # FILENAME_VALIDATION_INDEXES = r'/home/a/Downloads/UCI_from_Michael/data/image-segmentation/validation_folds_py.dat'
+    # assert_values_flag = True
+    # dataset_dict = {'name': 'image_segmentation',
+    #                 'file_names': (FILENAME_DATA, FILENAME_LABELS, FILENAME_INDEXES_TEST, FILENAME_VALIDATION_INDEXES),
+    #                 'assert_values_flag': assert_values_flag,
+    #                 'validation_train_ratio': 5.0,
+    #                 'test_alldata_ratio': 300.0 / 330}
+    json_path = os.path.join(args.params_dir, 'image_segmentation_params.json')
+    assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
+    dataset_dict = param_manager.DatasetParams(json_path)
+
 
     # TODO: add support for different dropout rates in different layers
     keep_prob = 0.5
@@ -354,7 +359,7 @@ if __name__ == '__main__':
     # hidden_size_list = [256] * 15
     # dropout_hidden_list = [0] *14 +[keep_prob]
     dataset = parse_image_seg.Dataset(dataset_dict)
-    model = NeuralNet(hidden_size_list, dropout_hidden_list, dataset, logger)
+    model = NeuralNet(hidden_size_list, dropout_hidden_list, dataset, logger, params)
 
     # arabic_model.dataset.pca_scatter_plot(arabic_model.dataset.test_set)
     # logger.info('1NN Baseline accuarcy: %.3f' % arabic_model.run_baseline(arabic_model.dataset.train_set,

@@ -34,11 +34,12 @@ class Dataset(object):
     """
 
     def __init__(self, dataset_dict):
-        self.name = dataset_dict['name']
-        self.dict = dataset_dict
-        # data, labels = self.file_to_dataset(dataset_dict['file_names'][0])
-        data = np.genfromtxt(dataset_dict['file_names'][0], delimiter=',', dtype='float32')
-        labels = np.genfromtxt(dataset_dict['file_names'][1], delimiter=',', dtype='float32')
+        self.dict = dataset_dict.dict
+        self.name = self.dict['name']
+
+        # data, labels = self.file_to_dataset(self.dict['FILENAME_DATA'])
+        data = np.genfromtxt(self.dict['FILENAME_DATA'], delimiter=',', dtype='float32')
+        labels = np.genfromtxt(self.dict['FILENAME_LABELS'], delimiter=',', dtype='float32')
         # labels = self._map_class_str_to_num(labels)
 
         if data.ndim == 2:
@@ -47,13 +48,13 @@ class Dataset(object):
         else:
             assert(0, "shape isn't 2, add extra dimensions")
 
-        if dataset_dict['assert_values_flag']:
+        if self.dict['assert_values_flag']:
             self._assert_dataset_val(data, labels, N, T)
 
-        index_matrix_test = self.read_folds_indexes(dataset_dict['file_names'][2])
+        index_matrix_test = self.read_folds_indexes(self.dict['FILENAME_INDEXES_TEST'])
         fold_0_test_indexes = index_matrix_test[:, 1]
         if self.dict['validation_train_ratio'] != 0:
-            index_matrix_validation = self.read_folds_indexes(dataset_dict['file_names'][3])
+            index_matrix_validation = self.read_folds_indexes(self.dict['FILENAME_VALIDATION_INDEXES'])
             fold_0_validation_indexes = index_matrix_validation[:, 1]
             self.validation_set_exist = True
         else:
@@ -64,7 +65,7 @@ class Dataset(object):
             (fold_0_test_indexes, fold_0_validation_indexes, data, labels)
 
 
-        # test_set, test_labels = self.file_to_dataset(dataset_dict['file_names'][1])
+        # test_set, test_labels = self.file_to_dataset(self.dict['FILENAME_LABELS'])
         # test_labels = self._map_class_str_to_num(test_labels)
         #
         # test_alldata_ratio = 1.0 * test_labels.shape[0] / (test_labels.shape[0] + train_labels.shape[0])

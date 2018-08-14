@@ -1,6 +1,10 @@
 import os
 import json
 import numpy as np
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--dataset_dir', default='/home/a/Downloads/UCI_from_Michael/data/image-segmentation/', help="directory containing .json file detailing the dataset params")
 
 
 class Params(object):
@@ -32,6 +36,15 @@ class Params(object):
         """Gives dict-like access to Params instance by `params.dict['learning_rate']`"""
         return self.__dict__
 
+    @classmethod
+    def create_json_param_file(cls, json_path):
+        dict_params = cls._create_default_model_params()
+        save_dict_to_json(dict_params, json_path)
+
+    @classmethod
+    def _create_default_model_params(cls):
+        pass
+
 
 class ModelParams(Params):
     def __init__(self, json_path):
@@ -51,8 +64,23 @@ class ModelParams(Params):
         return dict
 
 
+class DatasetParams(Params):
+    def __init__(self, json_path):
+        super(DatasetParams, self).__init__(json_path)
 
-
+    @classmethod
+    def _create_default_model_params(cls):
+        args = parser.parse_args()
+        dict = {}
+        dict['name'] = 'image_segmentation'
+        dict['FILENAME_DATA'] = os.path.join(args.dataset_dir, 'image-segmentation_py.dat')
+        dict['FILENAME_LABELS'] = os.path.join(args.dataset_dir, 'labels_py.dat')
+        dict['FILENAME_INDEXES_TEST'] = os.path.join(args.dataset_dir, 'folds_py.dat')
+        dict['FILENAME_VALIDATION_INDEXES'] = os.path.join(args.dataset_dir, 'validation_folds_py.dat')
+        dict['assert_values_flag'] = True
+        dict['validation_train_ratio'] = 5.0
+        dict['test_alldata_ratio'] = 300.0 / 330
+        return dict
 
 
 def save_dict_to_json(d, json_path):
@@ -70,7 +98,7 @@ def save_dict_to_json(d, json_path):
             d[k] = v
         json.dump(d, f, indent=4)
 
-if __name__ == '__main__':
+def unitest():
     # Test save_dict_to_json function
     json_path = os.path.join("./Params", 'json')
     d = {'a': 3, 'b': np.array([2.3233554]), 'c': 'hello'}
@@ -93,3 +121,13 @@ if __name__ == '__main__':
     model_params.dict['number of layers'] = 8
     json_path = os.path.join("./Params", 'depth_8.json')
     model_params.save(json_path)
+
+    # Create image segmentation dataset params
+    json_path = os.path.join("./Params", 'image_segmentation_params.json')
+    DatasetParams.create_json_param_file(json_path)
+    image_segmentation_params = DatasetParams(json_path)
+    print image_segmentation_params.dict
+
+if __name__ == '__main__':
+    pass
+    # unitest()
