@@ -109,8 +109,9 @@ class NeuralNet(object):
 
 
     def model(self, data):
-        def _add_dropout_layer(op_layer_index, layer_index):
-            if self.dropout_l[layer_index] != 0:
+        def _add_dropout_layer(op_layer_index, layer_index, dropout_flag):
+            # if self.dropout_l[layer_index] != 0:
+            if dropout_flag:
                 self.logger.info("Added dropout layer after layer {} with dropout of {}".format(layer_index+1, self.dropout_l[layer_index]))
                 layer_l.append(tf.nn.dropout(layer_l[op_layer_index - 1], self.keep_prob_ph))
                 return 1
@@ -120,19 +121,24 @@ class NeuralNet(object):
         assert(len(self.dropout_l) == len(self.layer_size_l)-1)
         layer_l = []
         layer_index = 0
-        op_layer_index = 0
-        layer_l.append(tf.nn.relu(tf.matmul(data, self.weights_l[layer_index]) + self.biases_l[layer_index]))
-        # output = self.linear(data, self.weights_l[layer_index], self.biases_l[layer_index], 'Layer_0')
-        # assert layer_l[0] == output
-        op_layer_index += 1
-        op_layer_index += _add_dropout_layer(op_layer_index, layer_index)
+        # op_layer_index = 0
+        dropout_flag = self.dropout_l[layer_index] != 0
+        # layer_l.append(tf.nn.relu(tf.matmul(data, self.weights_l[layer_index]) + self.biases_l[layer_index]))
+        layer_l.append(self.linear(data, self.weights_l[layer_index], self.biases_l[layer_index], 'Layer_0', dropout_flag))
+
+
+        # op_layer_index += 1
+        # op_layer_index += _add_dropout_layer(op_layer_index, layer_index, dropout_flag)
         layer_index += 1
 
-        for layer_index in range(1, len(self.layer_size_l) - 1):
-            layer_l.append(tf.nn.relu(tf.matmul(layer_l[op_layer_index - 1], self.weights_l[layer_index]) + self.biases_l[layer_index]))
-            op_layer_index += 1
-            op_layer_index += _add_dropout_layer(op_layer_index, layer_index)
 
+        for layer_index in range(1, len(self.layer_size_l) - 1):
+            # layer_l.append(tf.nn.relu(tf.matmul(layer_l[op_layer_index - 1], self.weights_l[layer_index]) + self.biases_l[layer_index]))
+            dropout_flag = self.dropout_l[layer_index] != 0
+            layer_l.append(self.linear(layer_l[layer_index - 1], self.weights_l[layer_index], self.biases_l[layer_index]
+                                       , 'Layer_{}'.format(layer_index), dropout_flag))
+            # op_layer_index += 1
+            # op_layer_index += _add_dropout_layer(op_layer_index, layer_index, dropout_flag)
 
         output = tf.matmul(layer_l[-1], self.weights_l[-1]) + self.biases_l[-1]
         return output
@@ -150,7 +156,7 @@ class NeuralNet(object):
             if activation:
                 output = activation(output)
             if dropout:
-                tf.nn.dropout(output, self.keep_prob_ph)
+                output = tf.nn.dropout(output, self.keep_prob_ph)
 
             return output
 
@@ -249,11 +255,13 @@ class NeuralNet(object):
         else:
             self.logger.info('Validation accuracy: Nan - no validation set, IGNORE')
 
-    def run_baseline(self, train_set, train_labels, test_set, test_labels):
+    @staticmethod
+    def run_baseline(train_set, train_labels, test_set, test_labels):
         nn = nearest_neighbor.NearestNeighbor()
         return nn.compute_one_nearest_neighbor_accuracy(train_set, train_labels, test_set, test_labels)
 
-    def build_optimizer(self, lr_node, loss):
+    @staticmethod
+    def build_optimizer(lr_node, loss):
         # return tf.train.AdamOptimizer(lr_node).minimize(self.loss)
         # return tf.train.GradientDescentOptimizer(lr_node).minimize(self.loss)
         t_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)

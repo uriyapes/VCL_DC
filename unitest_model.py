@@ -54,6 +54,7 @@ class TestModel(unittest.TestCase):
             var_to_shape_map = reader.get_variable_to_shape_map()
             assert(len(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)) == len(var_to_shape_map))
             for key in var_to_shape_map:
+                self.logger.info('Check variable: ' + key)
                 valid_tensor_value = reader.get_tensor(key)
                 curr_tensor_var = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=key)[0]
                 curr_tensor_value = sess.run(curr_tensor_var)
