@@ -63,6 +63,19 @@ class ModelParams(Params):
         dict['number of epochs'] = 500
         return dict
 
+    @classmethod
+    def create_model_params(cls, batch_norm=0, keep_prob=0.5, num_of_layers=4, activation='RELU', random_seeds_flag=1,
+                            tf_seed=230, np_seed=100, num_of_epochs=500):
+        dict = {}
+        dict['batch norm'] = batch_norm
+        dict['keep prob for dropout'] = keep_prob
+        dict['number of layers'] = num_of_layers
+        dict['activation'] = activation
+        dict['random seeds'] = random_seeds_flag
+        dict['tf seed'] = tf_seed
+        dict['np seed'] = np_seed
+        dict['number of epochs'] = num_of_epochs
+        return dict
 
 class DatasetParams(Params):
     def __init__(self, json_path):

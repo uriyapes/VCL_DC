@@ -26,7 +26,7 @@ class NeuralNet(object):
         self.learning_rate_update_at_epoch = 200
         self.learning_rate_updated = 1e-3
         self.dataset = dataset
-        self.params = model_params.dict
+        self.params = model_params
 
     def build_model(self):
         T, D = self.dataset.get_dimensions()
@@ -109,22 +109,16 @@ class NeuralNet(object):
 
 
     def model(self, data):
-        def _add_dropout_layer(op_layer_index, layer_index, dropout_flag):
-            # if self.dropout_l[layer_index] != 0:
-            if dropout_flag:
-                self.logger.info("Added dropout layer after layer {} with dropout of {}".format(layer_index+1, self.dropout_l[layer_index]))
-                layer_l.append(tf.nn.dropout(layer_l[op_layer_index - 1], self.keep_prob_ph))
-                return 1
-            return 0
-
         assert(self.layer_size_l[-1] == self.dataset.get_num_of_labels())
         assert(len(self.dropout_l) == len(self.layer_size_l)-1)
         layer_l = []
         layer_index = 0
         # op_layer_index = 0
         dropout_flag = self.dropout_l[layer_index] != 0
+
         # layer_l.append(tf.nn.relu(tf.matmul(data, self.weights_l[layer_index]) + self.biases_l[layer_index]))
-        layer_l.append(self.linear(data, self.weights_l[layer_index], self.biases_l[layer_index], 'Layer_0', dropout_flag))
+        layer_l.append(self.linear(data, self.weights_l[layer_index], self.biases_l[layer_index], 'Layer_0',
+                                   dropout_flag, self.params['batch norm']))
 
 
         # op_layer_index += 1
@@ -136,7 +130,7 @@ class NeuralNet(object):
             # layer_l.append(tf.nn.relu(tf.matmul(layer_l[op_layer_index - 1], self.weights_l[layer_index]) + self.biases_l[layer_index]))
             dropout_flag = self.dropout_l[layer_index] != 0
             layer_l.append(self.linear(layer_l[layer_index - 1], self.weights_l[layer_index], self.biases_l[layer_index]
-                                       , 'Layer_{}'.format(layer_index), dropout_flag))
+                                       , 'Layer_{}'.format(layer_index), dropout_flag, self.params['batch norm']))
             # op_layer_index += 1
             # op_layer_index += _add_dropout_layer(op_layer_index, layer_index, dropout_flag)
 
@@ -144,7 +138,7 @@ class NeuralNet(object):
         return output
 
     # def linear(input_, output_size, sample_size, eps, scope=None, bn=False, activation=None, hidden=True):
-    def linear(self, input_to_layer, weights, bias, scope, dropout=None, sample_size=None, bn=False, activation=tf.nn.relu, hidden=False):
+    def linear(self, input_to_layer, weights, bias, scope, dropout=None, bn=False, activation=tf.nn.relu, hidden=False, sample_size=None):
 
         with tf.variable_scope(scope):
             output = tf.matmul(input_to_layer, weights) + bias
@@ -160,6 +154,7 @@ class NeuralNet(object):
 
             return output
 
+    @staticmethod
     def batchnorm(inputT, is_training=False, scope=None):
         # Note: is_training is tf.placeholder(tf.bool) type
         is_training = tf.get_collection('istrainvar')[0]
@@ -322,13 +317,13 @@ if __name__ == '__main__':
     args = parser.parse_args()
     json_path = os.path.join(args.params_dir, 'model_params_template.json')
     assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
-    params = param_manager.ModelParams(json_path)
+    params = param_manager.ModelParams(json_path).dict
+    # params = param_manager.ModelParams.create_model_params(batch_norm=1)
+    if params['random seeds'] == 1:
+        params['tf seed'] = random.randint(1, 2**31)
+        params['np seed'] = random.randint(1, 2**31)
 
-    if params.dict['random seeds'] == 1:
-        params.dict['tf seed'] = random.randint(1, 2**31)
-        params.dict['np seed'] = random.randint(1, 2**31)
-
-    NeuralNet.set_seeds(params.dict['tf seed'], int(params.dict['np seed']))
+    NeuralNet.set_seeds(params['tf seed'], int(params['np seed']))
 
     # FILENAME_TRAIN = r'datasets/image-segmentation/segmentation.data'
     # FILENAME_TEST = r'datasets/image-segmentation/segmentation.test'
