@@ -21,15 +21,18 @@ class TestModel(unittest.TestCase):
         args = parser.parse_args()
         json_path = os.path.join(args.params_dir, 'unitest_params1.json')
         assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
-        self.params = param_manager.ModelParams(json_path)
+        self.params = param_manager.ModelParams(json_path).dict
 
-        if self.params.dict['random seeds'] == 1:
-            self.params.dict['tf seed'] = random.randint(1, 2 ** 31)
-            self.params.dict['np seed'] = random.randint(1, 2 ** 31)
+        if self.params['random seeds'] == 1:
+            self.params['tf seed'] = random.randint(1, 2 ** 31)
+            self.params['np seed'] = random.randint(1, 2 ** 31)
 
-        NeuralNet.set_seeds(int(self.params.dict['tf seed']), int(self.params.dict['np seed']))
+        NeuralNet.set_seeds(int(self.params['tf seed']), int(self.params['np seed']))
 
-    def test_model_vars(self):
+    def tearDown(self):
+        tf.reset_default_graph()
+
+    def test_model_vars_after_run(self):
         args = parser.parse_args()
         json_path = os.path.join(args.params_dir, 'image_segmentation_params.json')
         assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
@@ -46,10 +49,37 @@ class TestModel(unittest.TestCase):
         model.build_model()
         model.train_model()
         test_set, test_labels, network_acc, test_pred_eval = model.eval_model()
-
         checkpoint_path = "./results/unitest1.ckpt"
+        self.compare_to_ckpt(model, checkpoint_path)
+
+
+
+    def test_model_init(self):
+        args = parser.parse_args()
+        json_path = os.path.join(args.params_dir, 'image_segmentation_params.json')
+        assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
+        dataset_dict = param_manager.DatasetParams(json_path)
+
+        keep_prob = 0.5
+        # depth of 5
+        hidden_size_list = [256, 256, 256, 256]
+        dropout_hidden_list = [0, 0, 0, keep_prob]
+
+        dataset = parse_image_seg.Dataset(dataset_dict)
+        params = self.params
+        params['number of epochs'] = 0
+        model = NeuralNet(hidden_size_list, dropout_hidden_list, dataset, self.logger, params)
+
+        model.build_model()
+        model.train_model()
+        test_set, test_labels, network_acc, test_pred_eval = model.eval_model()
+        checkpoint_path = "./results/unitest_init.ckpt"
+        self.compare_to_ckpt(model, checkpoint_path)
+
+
+
+    def compare_to_ckpt(self, model, checkpoint_path):
         with model.sess.as_default() as sess:
-            sess.run(model.isTrain_node.assign(True))
             reader = pywrap_tensorflow.NewCheckpointReader(checkpoint_path)
             var_to_shape_map = reader.get_variable_to_shape_map()
             assert(len(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)) == len(var_to_shape_map))

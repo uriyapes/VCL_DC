@@ -52,20 +52,11 @@ class ModelParams(Params):
 
     @classmethod
     def _create_default_model_params(cls):
-        dict = {}
-        dict['batch norm'] = 0
-        dict['keep prob for dropout'] = 0.5
-        dict['number of layers'] = 4
-        dict['activation'] = 'RELU'
-        dict['random seeds'] = 1
-        dict['tf seed'] = 230
-        dict['np seed'] = 100
-        dict['number of epochs'] = 500
-        return dict
+        return cls.create_model_params()
 
     @classmethod
     def create_model_params(cls, batch_norm=0, keep_prob=0.5, num_of_layers=4, activation='RELU', random_seeds_flag=1,
-                            tf_seed=230, np_seed=100, num_of_epochs=500):
+                            tf_seed=230, np_seed=100, num_of_epochs=500, ckpt_flag=0, ckpt_file_name=None):
         dict = {}
         dict['batch norm'] = batch_norm
         dict['keep prob for dropout'] = keep_prob
@@ -75,6 +66,8 @@ class ModelParams(Params):
         dict['tf seed'] = tf_seed
         dict['np seed'] = np_seed
         dict['number of epochs'] = num_of_epochs
+        dict['check point flag'] = ckpt_flag
+        dict['check point name'] = ckpt_file_name
         return dict
 
 class DatasetParams(Params):
@@ -106,7 +99,7 @@ def save_dict_to_json(d, json_path):
         # We need to convert the values to float for json (it doesn't accept np.array, np.float, )
         # d = {k: float(v) for k, v in d.items()}
         for k,v in d.items():
-            if type(v) != str:
+            if type(v) != str and v is not None:
                 v = float(v)
             d[k] = v
         json.dump(d, f, indent=4)
@@ -131,8 +124,9 @@ def unitest():
     model_params = ModelParams(json_path)
     print model_params.dict
 
-    model_params.dict['number of layers'] = 8
-    json_path = os.path.join("./Params", 'depth_8.json')
+    model_params.dict['number of epochs'] = 5
+    model_params.dict['random seeds'] = 0
+    json_path = os.path.join("./Params", 'unitest_params1.json')
     model_params.save(json_path)
 
     # Create image segmentation dataset params
@@ -142,5 +136,5 @@ def unitest():
     print image_segmentation_params.dict
 
 if __name__ == '__main__':
-    pass
-    # unitest()
+    # pass
+    unitest()

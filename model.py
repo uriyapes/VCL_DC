@@ -43,25 +43,28 @@ class NeuralNet(object):
         self.tf_train_dataset = tf.constant(self.dataset.get_train_set())
         if self.dataset.validation_set_exist:
             self.tf_valid_dataset = tf.constant(self.dataset.get_validation_set())
-        tf_test_dataset = tf.constant(self.dataset.get_test_set())
+        self.tf_test_dataset = tf.constant(self.dataset.get_test_set())
 
         self.set_architecture_variables(weights_init_type="SELU")
 
         # Training computation.
         # Predictions for the training, validation, and test data.
-        logits = self.model(self.tf_train_minibatch)
-        self.train_prediction = tf.nn.softmax(logits)
+        # logits = self.model(self.tf_train_minibatch)
+        # self.train_prediction = tf.nn.softmax(logits)
+        #
+        # train_logits_full_set = self.model(self.tf_train_dataset)
+        # self.train_prediction_full_set = tf.nn.softmax(train_logits_full_set)
+        #
+        # if self.dataset.validation_set_exist:
+        #     valid_logits = self.model(self.tf_valid_dataset)
+        #     self.valid_prediction = tf.nn.softmax(valid_logits)
+        #
+        # self.test_logits = self.model(tf_test_dataset)
+        # self.test_prediction = tf.nn.softmax(self.test_logits)
 
-        train_logits_full_set = self.model(self.tf_train_dataset)
-        self.train_prediction_full_set = tf.nn.softmax(train_logits_full_set)
 
-        if self.dataset.validation_set_exist:
-            valid_logits = self.model(self.tf_valid_dataset)
-            self.valid_prediction = tf.nn.softmax(valid_logits)
-
-        self.test_logits = self.model(tf_test_dataset)
-        self.test_prediction = tf.nn.softmax(self.test_logits)
-
+        logits = self.model()
+        self.prediction = tf.nn.softmax(logits)
         # TODO: change to softmax_cross_entropy_with_logits_v2 when tf is updated
         self.loss = tf.reduce_mean(
             tf.nn.softmax_cross_entropy_with_logits(labels=self.tf_train_labels, logits=logits))
@@ -108,31 +111,23 @@ class NeuralNet(object):
         tf.add_to_collection('istrainvar', self.isTrain_node)
 
 
-    def model(self, data):
+    def model(self):
         assert(self.layer_size_l[-1] == self.dataset.get_num_of_labels())
         assert(len(self.dropout_l) == len(self.layer_size_l)-1)
         layer_l = []
         layer_index = 0
-        # op_layer_index = 0
         dropout_flag = self.dropout_l[layer_index] != 0
 
-        # layer_l.append(tf.nn.relu(tf.matmul(data, self.weights_l[layer_index]) + self.biases_l[layer_index]))
-        layer_l.append(self.linear(data, self.weights_l[layer_index], self.biases_l[layer_index], 'Layer_0',
+        # layer_l.append(tf.nn.relu(tf.matmul(self.data_node_ph, self.weights_l[layer_index]) + self.biases_l[layer_index]))
+        layer_l.append(self.linear(self.data_node_ph, self.weights_l[layer_index], self.biases_l[layer_index], 'Layer_0',
                                    dropout_flag, self.params['batch norm']))
-
-
-        # op_layer_index += 1
-        # op_layer_index += _add_dropout_layer(op_layer_index, layer_index, dropout_flag)
         layer_index += 1
-
 
         for layer_index in range(1, len(self.layer_size_l) - 1):
             # layer_l.append(tf.nn.relu(tf.matmul(layer_l[op_layer_index - 1], self.weights_l[layer_index]) + self.biases_l[layer_index]))
             dropout_flag = self.dropout_l[layer_index] != 0
             layer_l.append(self.linear(layer_l[layer_index - 1], self.weights_l[layer_index], self.biases_l[layer_index]
                                        , 'Layer_{}'.format(layer_index), dropout_flag, self.params['batch norm']))
-            # op_layer_index += 1
-            # op_layer_index += _add_dropout_layer(op_layer_index, layer_index, dropout_flag)
 
         output = tf.matmul(layer_l[-1], self.weights_l[-1]) + self.biases_l[-1]
         return output
@@ -181,10 +176,10 @@ class NeuralNet(object):
 
                 step += 1
                 batch_data, batch_labels = self.get_mini_batch()
-                feed_dict = {self.tf_train_minibatch : batch_data, self.tf_train_labels : batch_labels,
+                feed_dict = {self.data_node_ph: batch_data, self.tf_train_labels : batch_labels,
                              self.keep_prob_ph : dropout, self.learning_rate_ph: self.learning_rate}
                 _, l, predictions = self.sess.run(
-                    [self.optimizer, self.loss, self.train_prediction], feed_dict=feed_dict)
+                    [self.optimizer, self.loss, self.prediction], feed_dict=feed_dict)
                 if (prev_epoch != self.epoch):
                     prev_epoch = self.epoch
                     self.logger.info('batch_labels: {}'.format(np.argmax(batch_labels, 1)))
@@ -194,7 +189,6 @@ class NeuralNet(object):
                     # self.eval_validation_accuracy()
                     self.eval_model()
                     self.sess.run(self.isTrain_node.assign(True))
-            # self.save_variables('./results/unitest1')
         self.dataset.count_classes_for_all_datasets()
         #self.dataset.count_classes(batch_labels)
         self.logger.info("Training stopped at epoch: %i" % self.epoch)
@@ -205,12 +199,14 @@ class NeuralNet(object):
         test_labels = self.dataset.get_test_labels()
         with self.sess.as_default():
             self.sess.run(self.isTrain_node.assign(False))
-            self.logger.info('Train accuracy: %.3f' % self.accuracy(
-                self.train_prediction_full_set.eval(feed_dict={self.keep_prob_ph : 1}), self.initial_train_labels))
+
+            self.logger.info('Train accuracy: %.3f' % self.accuracy(self.prediction.eval(
+                                 feed_dict={self.data_node_ph: self.dataset.get_train_set(), self.keep_prob_ph : 1}),
+                                                                    self.dataset.get_train_labels()))
 
             self.eval_validation_accuracy()
 
-            test_pred_eval = self.test_prediction.eval(feed_dict={self.keep_prob_ph : 1})
+            test_pred_eval = self.prediction.eval(feed_dict={self.data_node_ph: self.dataset.get_test_set(), self.keep_prob_ph : 1})
             network_acc = self.accuracy(test_pred_eval, test_labels)
             self.logger.info('Test accuracy: %.3f' % network_acc)
         return self.dataset.get_test_set(), (np.argmax(self.dataset.get_test_labels(), 1) + 1), network_acc, test_pred_eval
@@ -245,8 +241,8 @@ class NeuralNet(object):
 
     def eval_validation_accuracy(self):
         if self.dataset.validation_set_exist:
-            self.logger.info('Validation accuracy: %.3f' % self.accuracy(
-                self.valid_prediction.eval(feed_dict={self.keep_prob_ph : 1}), self.dataset.get_validation_labels()))
+            valid_acc = self.prediction.eval(feed_dict={self.data_node_ph: self.dataset.get_validation_set(), self.keep_prob_ph: 1})
+            self.logger.info('Validation accuracy: %.3f' % self.accuracy(valid_acc, self.dataset.get_validation_labels()))
         else:
             self.logger.info('Validation accuracy: Nan - no validation set, IGNORE')
 
@@ -277,13 +273,16 @@ class NeuralNet(object):
 
     def set_placeholders(self):
         # Input data placeholders
-        self.tf_train_minibatch = tf.placeholder(
-            tf.float32, shape=(self.batch_size, self.dataset.get_dimensions()[0]), name="train_minibatch_placeholder")
+        # self.tf_train_minibatch = tf.placeholder(
+        #     tf.float32, shape=(self.batch_size, self.dataset.get_dimensions()[0]), name="train_minibatch_placeholder")
+        self.data_node_ph = tf.placeholder(
+            tf.float32, shape=(None, self.dataset.get_dimensions()[0]), name="data_node_placeholder")
         self.tf_train_labels = tf.placeholder(tf.float32, shape=(self.batch_size, self.dataset.get_num_of_labels()),
                                               name="train_labels_placeholder")
         # hyper-parameters placeholders
         self.keep_prob_ph = tf.placeholder(tf.float32)
         self.learning_rate_ph = tf.placeholder(tf.float32)
+
 
     def save_variables(self, filename=None):
         assert hasattr(self, 'sess')
@@ -315,15 +314,21 @@ if __name__ == '__main__':
     logger.info('Start logging')
     # Load the parameters from json file
     args = parser.parse_args()
-    json_path = os.path.join(args.params_dir, 'model_params_template.json')
+    # json_path = os.path.join(args.params_dir, 'model_params_template.json')
+    json_path = os.path.join(args.params_dir, 'unitest_params1.json')
     assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
     params = param_manager.ModelParams(json_path).dict
     # params = param_manager.ModelParams.create_model_params(batch_norm=1)
+    params['number of epochs'] = 0
+    params['check point flag'] = 1
+    params['check point name'] = './results/unitest_init'
     if params['random seeds'] == 1:
         params['tf seed'] = random.randint(1, 2**31)
         params['np seed'] = random.randint(1, 2**31)
 
-    NeuralNet.set_seeds(params['tf seed'], int(params['np seed']))
+    NeuralNet.set_seeds(int(params['tf seed']), int(params['np seed']))
+
+
 
     # FILENAME_TRAIN = r'datasets/image-segmentation/segmentation.data'
     # FILENAME_TEST = r'datasets/image-segmentation/segmentation.test'
@@ -373,3 +378,6 @@ if __name__ == '__main__':
     model.train_model()
     test_set, test_labels, network_acc, test_pred_eval = model.eval_model()
     # arabic_model.dataset.pca_scatter_plot(arabic_model.test_embed_vec_result)
+
+    if model.params['check point flag']:
+        model.save_variables(model.params['check point name'])
