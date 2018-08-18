@@ -66,8 +66,11 @@ class NeuralNet(object):
         logits = self.model()
         self.prediction = tf.nn.softmax(logits)
         # TODO: change to softmax_cross_entropy_with_logits_v2 when tf is updated
-        self.loss = tf.reduce_mean(
-            tf.nn.softmax_cross_entropy_with_logits(labels=self.tf_train_labels, logits=logits))
+        self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.tf_train_labels, logits=logits))
+        if self.params['vcl']:
+            l2_norm = tf.get_collection('l2_norm')
+            l2_norm = tf.add_n(l2_norm)
+            self.loss = self.loss + self.params['gamma'] * l2_norm
         # Optimizer.
         self.optimizer = self.build_optimizer(self.learning_rate_ph, self.loss)
 
@@ -117,31 +120,35 @@ class NeuralNet(object):
         layer_l = []
         layer_index = 0
         dropout_flag = self.dropout_l[layer_index] != 0
+        if self.params['activation'] == 'RELU':
+            activation = tf.nn.relu
+        else:
+            assert 0
 
         # layer_l.append(tf.nn.relu(tf.matmul(self.data_node_ph, self.weights_l[layer_index]) + self.biases_l[layer_index]))
         layer_l.append(self.linear(self.data_node_ph, self.weights_l[layer_index], self.biases_l[layer_index], 'Layer_0',
-                                   dropout_flag, self.params['batch norm']))
+                                   dropout_flag, self.params['batch norm'], activation, self.params['vcl']))
         layer_index += 1
 
         for layer_index in range(1, len(self.layer_size_l) - 1):
             # layer_l.append(tf.nn.relu(tf.matmul(layer_l[op_layer_index - 1], self.weights_l[layer_index]) + self.biases_l[layer_index]))
             dropout_flag = self.dropout_l[layer_index] != 0
             layer_l.append(self.linear(layer_l[layer_index - 1], self.weights_l[layer_index], self.biases_l[layer_index]
-                                       , 'Layer_{}'.format(layer_index), dropout_flag, self.params['batch norm']))
+                                       , 'Layer_{}'.format(layer_index), dropout_flag, self.params['batch norm'],
+                                          activation, self.params['vcl']))
 
         output = tf.matmul(layer_l[-1], self.weights_l[-1]) + self.biases_l[-1]
         return output
 
     # def linear(input_, output_size, sample_size, eps, scope=None, bn=False, activation=None, hidden=True):
-    def linear(self, input_to_layer, weights, bias, scope, dropout=None, bn=False, activation=tf.nn.relu, hidden=False, sample_size=None):
+    def linear(self, input_to_layer, weights, bias, scope, dropout=None, bn=False, activation=tf.nn.relu, vcl=0, sample_size=10):
 
         with tf.variable_scope(scope):
             output = tf.matmul(input_to_layer, weights) + bias
             if bn:
                 output = self.batchnorm(output, scope=scope)
-            if hidden:
-                # stability_loss(output, sample_size)
-                pass
+            if vcl:
+                self.add_vcl_loss(output, sample_size)
             if activation:
                 output = activation(output)
             if dropout:
@@ -159,6 +166,17 @@ class NeuralNet(object):
                        lambda: batch_norm(inputT, is_training=False,
                                           center=True, scale=True, decay=0.9, updates_collections=None, scope=scope,
                                           reuse=True))
+
+    @staticmethod
+    def add_vcl_loss(inp, sample_size):
+        me1, var1 = tf.nn.moments(inp[0:sample_size, :], 0)
+        me2, var2 = tf.nn.moments(inp[sample_size:2 * sample_size, :], 0)
+        shape = var1.get_shape()
+        eps1 = tf.get_variable("epsilon", (shape[0]), tf.float32, tf.constant_initializer(0.1))
+        var1 = tf.abs(var1)
+        var2 = tf.abs(var2)
+        tf.add_to_collection('l2_norm', (tf.reduce_mean(tf.square(1 - (var1) / (var2 + eps1)))))
+
 
     def train_model(self):
         self.tf_saver = tf.train.Saver()
@@ -186,7 +204,6 @@ class NeuralNet(object):
                     self.logger.info('predictions: {}'.format(np.argmax(predictions, 1)))
                     self.logger.info('Minibatch loss at epoch %d: %f' % (self.epoch, l))
                     self.logger.info('Minibatch accuracy: %.3f' % self.accuracy(predictions, batch_labels))
-                    # self.eval_validation_accuracy()
                     self.eval_model()
                     self.sess.run(self.isTrain_node.assign(True))
         self.dataset.count_classes_for_all_datasets()
@@ -273,8 +290,6 @@ class NeuralNet(object):
 
     def set_placeholders(self):
         # Input data placeholders
-        # self.tf_train_minibatch = tf.placeholder(
-        #     tf.float32, shape=(self.batch_size, self.dataset.get_dimensions()[0]), name="train_minibatch_placeholder")
         self.data_node_ph = tf.placeholder(
             tf.float32, shape=(None, self.dataset.get_dimensions()[0]), name="data_node_placeholder")
         self.tf_train_labels = tf.placeholder(tf.float32, shape=(self.batch_size, self.dataset.get_num_of_labels()),
@@ -314,46 +329,28 @@ if __name__ == '__main__':
     logger.info('Start logging')
     # Load the parameters from json file
     args = parser.parse_args()
-    # json_path = os.path.join(args.params_dir, 'model_params_template.json')
-    json_path = os.path.join(args.params_dir, 'unitest_params1.json')
+    # json_filename = 'model_params_template.json'
+    # json_filename = 'unitest_params1.json'
+    json_filename = 'vcl.json'
+    json_path = os.path.join(args.params_dir, json_filename)
     assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
     params = param_manager.ModelParams(json_path).dict
     # params = param_manager.ModelParams.create_model_params(batch_norm=1)
-    params['number of epochs'] = 0
-    params['check point flag'] = 1
-    params['check point name'] = './results/unitest_init'
+    # params['number of epochs'] = 0
+    # params['check point flag'] = 1
+    # params['check point name'] = './results/unitest2'
+    params['batch norm'] = 1
     if params['random seeds'] == 1:
         params['tf seed'] = random.randint(1, 2**31)
         params['np seed'] = random.randint(1, 2**31)
 
-    NeuralNet.set_seeds(int(params['tf seed']), int(params['np seed']))
+    NeuralNet.set_seeds(params['tf seed'], params['np seed'])
 
 
-
-    # FILENAME_TRAIN = r'datasets/image-segmentation/segmentation.data'
-    # FILENAME_TEST = r'datasets/image-segmentation/segmentation.test'
-    # assert_values_flag = True
-    # dataset_dict = {'name': 'image_segmentation', 'file_names': (FILENAME_TRAIN, FILENAME_TEST),
-    #                 'assert_values_flag': assert_values_flag, 'validation_train_ratio': 0.1,
-    #                 'test_alldata_ratio' : 0.01}
-    # assert(type(dataset_dict['test_alldata_ratio']) == float and type(dataset_dict['validation_train_ratio'] == float))
-
-
-    # FILENAME_DATA = r'/home/a/Downloads/UCI_from_Michael/data/image-segmentation/image-segmentation_py.dat'
-    # FILENAME_LABELS = r'/home/a/Downloads/UCI_from_Michael/data/image-segmentation/labels_py.dat'
-    # # FILENAME_TEST = r'datasets/image-segmentation/segmentation.test'
-    # FILENAME_INDEXES_TEST = r'/home/a/Downloads/UCI_from_Michael/data/image-segmentation/folds_py.dat'
-    # FILENAME_VALIDATION_INDEXES = r'/home/a/Downloads/UCI_from_Michael/data/image-segmentation/validation_folds_py.dat'
-    # assert_values_flag = True
-    # dataset_dict = {'name': 'image_segmentation',
-    #                 'file_names': (FILENAME_DATA, FILENAME_LABELS, FILENAME_INDEXES_TEST, FILENAME_VALIDATION_INDEXES),
-    #                 'assert_values_flag': assert_values_flag,
-    #                 'validation_train_ratio': 5.0,
-    #                 'test_alldata_ratio': 300.0 / 330}
     json_path = os.path.join(args.params_dir, 'image_segmentation_params.json')
     assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
-    dataset_dict = param_manager.DatasetParams(json_path)
-
+    dataset_dict = param_manager.DatasetParams(json_path).dict
+    # dataset_dict['fold'] = 2
 
     # TODO: add support for different dropout rates in different layers
     keep_prob = 0.5
@@ -361,8 +358,8 @@ if __name__ == '__main__':
     hidden_size_list = [256, 256, 256, 256]
     dropout_hidden_list = [0, 0, 0, keep_prob]
     #depth of 8
-    # hidden_size_list = [256,256,256,256,256,256,256]
-    # dropout_hidden_list = [0, 0, 0, 0, 0, 0, keep_prob]
+    # hidden_size_list = [256]*8
+    # dropout_hidden_list = [0, 0, 0, 0, 0, 0, 0, keep_prob]
     #depth of 16
     # hidden_size_list = [256] * 15
     # dropout_hidden_list = [0] *14 +[keep_prob]

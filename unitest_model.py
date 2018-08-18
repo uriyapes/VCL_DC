@@ -27,7 +27,7 @@ class TestModel(unittest.TestCase):
             self.params['tf seed'] = random.randint(1, 2 ** 31)
             self.params['np seed'] = random.randint(1, 2 ** 31)
 
-        NeuralNet.set_seeds(int(self.params['tf seed']), int(self.params['np seed']))
+        NeuralNet.set_seeds(self.params['tf seed'], self.params['np seed'])
 
     def tearDown(self):
         tf.reset_default_graph()
@@ -36,7 +36,7 @@ class TestModel(unittest.TestCase):
         args = parser.parse_args()
         json_path = os.path.join(args.params_dir, 'image_segmentation_params.json')
         assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
-        dataset_dict = param_manager.DatasetParams(json_path)
+        dataset_dict = param_manager.DatasetParams(json_path).dict
 
         keep_prob = 0.5
         # depth of 5
@@ -58,7 +58,7 @@ class TestModel(unittest.TestCase):
         args = parser.parse_args()
         json_path = os.path.join(args.params_dir, 'image_segmentation_params.json')
         assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
-        dataset_dict = param_manager.DatasetParams(json_path)
+        dataset_dict = param_manager.DatasetParams(json_path).dict
 
         keep_prob = 0.5
         # depth of 5

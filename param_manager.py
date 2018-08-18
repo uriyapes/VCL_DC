@@ -55,13 +55,15 @@ class ModelParams(Params):
         return cls.create_model_params()
 
     @classmethod
-    def create_model_params(cls, batch_norm=0, keep_prob=0.5, num_of_layers=4, activation='RELU', random_seeds_flag=1,
-                            tf_seed=230, np_seed=100, num_of_epochs=500, ckpt_flag=0, ckpt_file_name=None):
+    def create_model_params(cls, batch_norm=0, keep_prob=0.5, num_of_layers=4, activation='RELU', use_vcl=0, vcl_gamma=0.01,
+                            random_seeds_flag=1, tf_seed=230, np_seed=100, num_of_epochs=500, ckpt_flag=0, ckpt_file_name=None):
         dict = {}
         dict['batch norm'] = batch_norm
         dict['keep prob for dropout'] = keep_prob
         dict['number of layers'] = num_of_layers
         dict['activation'] = activation
+        dict['vcl'] = use_vcl
+        dict['gamma'] = vcl_gamma
         dict['random seeds'] = random_seeds_flag
         dict['tf seed'] = tf_seed
         dict['np seed'] = np_seed
@@ -86,6 +88,7 @@ class DatasetParams(Params):
         dict['assert_values_flag'] = True
         dict['validation_train_ratio'] = 5.0
         dict['test_alldata_ratio'] = 300.0 / 330
+        dict['fold'] = 1
         return dict
 
 
@@ -99,7 +102,7 @@ def save_dict_to_json(d, json_path):
         # We need to convert the values to float for json (it doesn't accept np.array, np.float, )
         # d = {k: float(v) for k, v in d.items()}
         for k,v in d.items():
-            if type(v) != str and v is not None:
+            if type(v) != str and v is not None and type(v) != int:
                 v = float(v)
             d[k] = v
         json.dump(d, f, indent=4)
@@ -118,15 +121,21 @@ def unitest():
     params.save(json_path + "2")
 
     # Create template for model params json file
-    json_path = os.path.join("./Params", 'model_params_template.json')
+    json_path_template = os.path.join("./Params", 'model_params_template.json')
     dict_params = ModelParams._create_default_model_params()
-    save_dict_to_json(dict_params, json_path)
-    model_params = ModelParams(json_path)
+    save_dict_to_json(dict_params, json_path_template)
+    model_params = ModelParams(json_path_template)
     print model_params.dict
 
     model_params.dict['number of epochs'] = 5
     model_params.dict['random seeds'] = 0
     json_path = os.path.join("./Params", 'unitest_params1.json')
+    model_params.save(json_path)
+
+
+    model_params.update(json_path_template)
+    model_params.dict['vcl'] = 1
+    json_path = os.path.join("./Params", 'vcl.json')
     model_params.save(json_path)
 
     # Create image segmentation dataset params

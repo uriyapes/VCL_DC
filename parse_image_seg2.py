@@ -34,7 +34,7 @@ class Dataset(object):
     """
 
     def __init__(self, dataset_dict):
-        self.dict = dataset_dict.dict
+        self.dict = dataset_dict
         self.name = self.dict['name']
 
         # data, labels = self.file_to_dataset(self.dict['FILENAME_DATA'])
@@ -52,10 +52,10 @@ class Dataset(object):
             self._assert_dataset_val(data, labels, N, T)
 
         index_matrix_test = self.read_folds_indexes(self.dict['FILENAME_INDEXES_TEST'])
-        fold_0_test_indexes = index_matrix_test[:, 1]
+        fold_0_test_indexes = index_matrix_test[:, self.dict['fold']]
         if self.dict['validation_train_ratio'] != 0:
             index_matrix_validation = self.read_folds_indexes(self.dict['FILENAME_VALIDATION_INDEXES'])
-            fold_0_validation_indexes = index_matrix_validation[:, 1]
+            fold_0_validation_indexes = index_matrix_validation[:, self.dict['fold']]
             self.validation_set_exist = True
         else:
             fold_0_validation_indexes = np.zeros(data.shape[0])
