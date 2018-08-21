@@ -48,7 +48,7 @@ def run_model_multiple_times(dataset_dict, dataset_folds_list, num_of_model_runs
     for j in xrange(len(dataset_folds_list)):
         dataset_dict['fold'] = dataset_folds_list[j]
         for i in xrange(num_of_model_runs):
-            logger = my_utilities.set_a_logger(str(log_num), dirpath=results_dir_path, filename='run_{}_fold_{}'.format(i,j))
+            logger = my_utilities.set_a_logger(str(log_num), dirpath=results_dir_path, filename='run_{}_fold_{}.log'.format(i,j))
             log_num += 1
             logger.info('Start logging')
             logger.info('########## Number of model run: {0} ##########'.format(i))
@@ -82,7 +82,7 @@ def choose_activation_regularizer(activation_regularizer):
         assert 0
     return batch_norm, use_vcl
 
-# def run_model_with_diff_hyperparams(model_name, num_of_model_runs, depth_list, activation_list, activation_regu_list):
+
 def run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs_per_config, depth_list, activation_list, activation_regu_list):
     timestamp = str(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
     path_results_dir = r"./results/" + timestamp
@@ -90,8 +90,7 @@ def run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs
     summary_result_filename = os.path.join(path_results_dir, "avg_results_over_{}_runs_over_{}_folds.csv".format(model_runs_per_config, len(dataset_folds_list)))
     write_results_to_csv_as_row(['activation', 'regularizer', 'depth', 'train accuracy', 'validation accuracy',
                                  'test accuracy'], summary_result_filename)
-    # l_avg_nn_acc = []
-    # l_avg_network_acc = []
+
     for a in xrange(len(activation_list)):
         activation = activation_list[a]
         dropout_keep_prob = 0.5 if activation != 'SELU' else 0.95
@@ -99,17 +98,20 @@ def run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs
             batch_norm, use_vcl = choose_activation_regularizer(activation_regu_list[r])
             for d in xrange(len(depth_list)):
                 depth = depth_list[d]
-
-                # TODO: create params inside run_model_multiple_times(..) func so each time we will get different seeds.
-                params = param_manager.ModelParams.create_model_params(batch_norm=batch_norm, keep_prob=dropout_keep_prob,
-                                                                       use_vcl=use_vcl, num_of_layers=depth)
-                #  TODO: just for testing - remove
-                params['number of epochs'] = 2
                 config_name = "activation_{}_regularizer_{}_depth_{}".format(activation, activation_regu_list[r], depth)
-
                 # This path is used to save the log information, parameter file and graph variables
                 path_run_info = os.path.join(path_results_dir, config_name)
                 os.mkdir(path_run_info)
+
+
+                # TODO: create params inside run_model_multiple_times(..) func so each time we will get different seeds.
+                # TODO: think about a better way to use ModelParams, maybe when creating the object a dict will be created automatically
+                params = param_manager.ModelParams.create_model_params(batch_norm=batch_norm, keep_prob=dropout_keep_prob,
+                                                                       use_vcl=use_vcl, num_of_layers=depth)
+                param_file = os.path.join(path_run_info, "param.json")
+                param_manager.save_dict_to_json(params, param_file)
+
+
                 best_index_l, final_train_acc_l, final_valid_acc_l, final_test_acc_l = run_model_multiple_times\
                                                          (dataset_dict, dataset_folds_list, model_runs_per_config, params,
                                                           path_run_info)
