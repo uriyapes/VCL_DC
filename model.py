@@ -16,9 +16,9 @@ parser.add_argument('--params_dir', default='./Params', help="directory containi
 class NeuralNet(object):
     def __init__(self, dataset, logger, model_params):
         self.params = model_params
+        logger.info('Create model with the following parameters:\n{}'.format(str(self.params)))
         # TODO: add support for different dropout rates in different layers
-        keep_prob = 0.5
-        # depth of 5
+        # The depth include only the hidden layer, the total number of layers include another classification layer
         hidden_size_list = [256] * self.params['depth']
         if self.params['activation'] != 'SELU':
             dropout_hidden_list = [0] * self.params['depth']
@@ -36,6 +36,8 @@ class NeuralNet(object):
         self.learning_rate_update_at_epoch = 200
         self.learning_rate_updated = 1e-3
         self.dataset = dataset
+        tf.reset_default_graph()
+        self.set_seeds(self.params['tf seed'], self.params['np seed'])
 
 
     def build_model(self):
@@ -154,9 +156,10 @@ class NeuralNet(object):
         output = tf.matmul(layer_l[-1], self.weights_l[-1]) + self.biases_l[-1]
         return output
 
-    # def linear(input_, output_size, sample_size, eps, scope=None, bn=False, activation=None, hidden=True):
-    def linear(self, input_to_layer, weights, bias, scope, dropout=None, bn=False, activation=tf.nn.relu, vcl=0, sample_size=10):
+    def linear(self, input_to_layer, weights, bias, scope, dropout=None, bn=False, activation=tf.nn.relu, vcl=False, sample_size=10):
 
+        if vcl != 0 and bn != False:
+            self.logger.warning('BOTH VCL AND BN ARE ACTIVE')
         with tf.variable_scope(scope):
             output = tf.matmul(input_to_layer, weights) + bias
             if bn:
@@ -304,7 +307,7 @@ class NeuralNet(object):
         train_op_net = optimizer.apply_gradients(grads_and_vars_rescaled)
         return train_op_net
 
-    def find_best_accuracy(self, valid_acc_l, test_acc_l):
+    def find_best_accuracy(self, train_acc_l, valid_acc_l, test_acc_l):
         val_acc_ma_l = []
         moving_average_win_size = 10
         best_val_acc_value = 0.0
@@ -320,7 +323,7 @@ class NeuralNet(object):
         self.logger.info('Best moving average validation accuracy appeared in epoch {} and his value is: {}'.format(best_val_acc_ind, best_val_acc_value))
         self.logger.info('Test accuracy in epoch {} is: {}'.format(best_val_acc_ind, test_acc_l[best_val_acc_ind]))
 
-        return best_val_acc_ind, best_val_acc_value, test_acc_l[best_val_acc_ind]
+        return best_val_acc_ind, train_acc_l[best_val_acc_ind], best_val_acc_value, test_acc_l[best_val_acc_ind]
 
 
     def set_batch_size(self, batch_size):
@@ -385,27 +388,20 @@ if __name__ == '__main__':
     # params['check point name'] = './results/unitest2'
     # params['batch norm'] = 0
     # params['activation'] = 'ELU'
-    if params['random seeds'] == 1:
-        params['tf seed'] = random.randint(1, 2**31)
-        params['np seed'] = random.randint(1, 2**31)
-
-    NeuralNet.set_seeds(params['tf seed'], params['np seed'])
 
 
     json_path = os.path.join(args.params_dir, 'image_segmentation_params.json')
     assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
     dataset_dict = param_manager.DatasetParams(json_path).dict
     # dataset_dict['fold'] = 2
-
-
     dataset = parse_image_seg.Dataset(dataset_dict)
-    logger.info('Create model with the following parameters:\n{}'.format(str(params)))
+
     model = NeuralNet(dataset, logger, params)
 
     model.build_model()
     train_acc_l, valid_acc_l, test_acc_l = model.train_model()
     train_acc, valid_acc, test_acc = model.eval_model()
-    index, valid_acc_ma_at_ind, test_acc_at_ind = model.find_best_accuracy(valid_acc_l, test_acc_l)
+    index, train_acc_at_ind, valid_acc_ma_at_ind, test_acc_at_ind = model.find_best_accuracy(valid_acc_l, test_acc_l)
 
     if model.params['check point flag']:
         model.save_variables(model.params['check point name'])

@@ -23,10 +23,6 @@ class TestModel(unittest.TestCase):
         assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
         self.params = param_manager.ModelParams(json_path).dict
 
-        if self.params['random seeds'] == 1:
-            self.params['tf seed'] = random.randint(1, 2 ** 31)
-            self.params['np seed'] = random.randint(1, 2 ** 31)
-
         NeuralNet.set_seeds(self.params['tf seed'], self.params['np seed'])
 
     def tearDown(self):

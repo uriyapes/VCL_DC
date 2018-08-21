@@ -12,7 +12,7 @@ def set_a_logger(log_name='log', dirpath="./", filename=None, console_level=logg
     If you wish to write to an existing file you should set the dirpath and filename params to the path of the file and
     make sure you are the first to call set_a_logger with log_name.
     :param log_name: The logger name, use the same name from different modules to write to the same file. In case no filename
-                      is given the log_name will used to create the filename (date and .log are added automatically).
+                      is given the log_name will used to create the filename (timestamp and .log are added automatically).
     :param dirpath: the logs directory.
     :param filename: if value is specified the name of the file will be filename without any suffix.
     :param console_level: logging level to the console (screen).

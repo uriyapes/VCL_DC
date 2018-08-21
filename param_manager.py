@@ -2,6 +2,7 @@ import os
 import json
 import numpy as np
 import argparse
+import random
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset_dir', default='/home/a/Downloads/UCI_from_Michael/data/image-segmentation/', help="directory containing .json file detailing the dataset params")
@@ -55,7 +56,7 @@ class ModelParams(Params):
         return cls.create_model_params()
 
     @classmethod
-    def create_model_params(cls, batch_norm=0, keep_prob=0.5, num_of_layers=4, activation='RELU', use_vcl=0, vcl_gamma=0.01,
+    def create_model_params(cls, batch_norm=False, keep_prob=0.5, num_of_layers=4, activation='RELU', use_vcl=False, vcl_gamma=0.01,
                             random_seeds_flag=1, tf_seed=230, np_seed=100, num_of_epochs=500, ckpt_flag=0, ckpt_file_name=None):
         dict = {}
         dict['batch norm'] = batch_norm
@@ -65,8 +66,12 @@ class ModelParams(Params):
         dict['vcl'] = use_vcl
         dict['gamma'] = vcl_gamma
         dict['random seeds'] = random_seeds_flag
-        dict['tf seed'] = tf_seed
-        dict['np seed'] = np_seed
+        if random_seeds_flag:
+            dict['tf seed'] = random.randint(1, 2 ** 31)
+            dict['np seed'] = random.randint(1, 2 ** 31)
+        else:
+            dict['tf seed'] = tf_seed
+            dict['np seed'] = np_seed
         dict['number of epochs'] = num_of_epochs
         dict['check point flag'] = ckpt_flag
         dict['check point name'] = ckpt_file_name
@@ -99,18 +104,18 @@ def save_dict_to_json(d, json_path):
         json_path: (string) path to json file
     """
     with open(json_path, 'w') as f:
-        # We need to convert the values to float for json (it doesn't accept np.array, np.float, )
+        # We need to convert the values to float for json (it doesn't accept np.array)
         # d = {k: float(v) for k, v in d.items()}
         for k,v in d.items():
-            if type(v) != str and v is not None and type(v) != int:
-                v = float(v)
+            # if type(v) != str and v is not None and type(v) != int:
+            #     v = float(v)
             d[k] = v
         json.dump(d, f, indent=4)
 
-def unitest():
+def gen_param_files():
     # Test save_dict_to_json function
     json_path = os.path.join("./Params", 'json')
-    d = {'a': 3, 'b': np.array([2.3233554]), 'c': 'hello'}
+    d = {'a': 3, 'c': 'hello'}
     save_dict_to_json(d, json_path)
 
     # Test the params class
@@ -129,6 +134,8 @@ def unitest():
 
     model_params.dict['number of epochs'] = 5
     model_params.dict['random seeds'] = 0
+    model_params.dict['tf seed'] = 230
+    model_params.dict['np seed'] = 100
     json_path = os.path.join("./Params", 'unitest_params1.json')
     model_params.save(json_path)
 
@@ -152,4 +159,4 @@ def unitest():
 
 if __name__ == '__main__':
     # pass
-    unitest()
+    gen_param_files()
