@@ -32,6 +32,7 @@ class TestModel(unittest.TestCase):
     def tearDown(self):
         tf.reset_default_graph()
 
+
     def test_model_vars_after_run(self):
         args = parser.parse_args()
         json_path = os.path.join(args.params_dir, 'image_segmentation_params.json')
@@ -48,7 +49,7 @@ class TestModel(unittest.TestCase):
 
         model.build_model()
         model.train_model()
-        test_set, test_labels, network_acc, test_pred_eval = model.eval_model()
+        model.eval_model()
         checkpoint_path = "./results/unitest1.ckpt"
         self.compare_to_ckpt(model, checkpoint_path)
 
@@ -72,7 +73,7 @@ class TestModel(unittest.TestCase):
 
         model.build_model()
         model.train_model()
-        test_set, test_labels, network_acc, test_pred_eval = model.eval_model()
+        model.eval_model()
         checkpoint_path = "./results/unitest_init.ckpt"
         self.compare_to_ckpt(model, checkpoint_path)
 

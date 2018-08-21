@@ -60,7 +60,7 @@ class ModelParams(Params):
         dict = {}
         dict['batch norm'] = batch_norm
         dict['keep prob for dropout'] = keep_prob
-        dict['number of layers'] = num_of_layers
+        dict['depth'] = num_of_layers
         dict['activation'] = activation
         dict['vcl'] = use_vcl
         dict['gamma'] = vcl_gamma

@@ -179,6 +179,9 @@ class NeuralNet(object):
 
 
     def train_model(self):
+        train_acc_l = []
+        valid_acc_l = []
+        test_acc_l = []
         self.tf_saver = tf.train.Saver()
         self.epoch = 0
         prev_epoch = -1
@@ -200,33 +203,39 @@ class NeuralNet(object):
                     [self.optimizer, self.loss, self.prediction], feed_dict=feed_dict)
                 if (prev_epoch != self.epoch):
                     prev_epoch = self.epoch
-                    self.logger.info('batch_labels: {}'.format(np.argmax(batch_labels, 1)))
-                    self.logger.info('predictions: {}'.format(np.argmax(predictions, 1)))
-                    self.logger.info('Minibatch loss at epoch %d: %f' % (self.epoch, l))
-                    self.logger.info('Minibatch accuracy: %.3f' % self.accuracy(predictions, batch_labels))
-                    self.eval_model()
+                    # self.logger.info('batch_labels: {}'.format(np.argmax(batch_labels, 1)))
+                    # self.logger.info('predictions: {}'.format(np.argmax(predictions, 1)))
+                    # self.logger.info('Minibatch loss at epoch %d: %f' % (self.epoch, l))
+                    # self.logger.info('Minibatch accuracy: %.3f' % self.accuracy(predictions, batch_labels))
+                    self.logger.info('epoch %d' % self.epoch)
+                    train_acc, valid_acc, test_acc = self.eval_model()
+                    train_acc_l.append(train_acc)
+                    valid_acc_l.append(valid_acc)
+                    test_acc_l.append(test_acc)
                     self.sess.run(self.isTrain_node.assign(True))
         self.dataset.count_classes_for_all_datasets()
         #self.dataset.count_classes(batch_labels)
         self.logger.info("Training stopped at epoch: %i" % self.epoch)
+        return train_acc_l, valid_acc_l, test_acc_l
 
 
     def eval_model(self):
         assert ~np.array_equal(self.initial_train_labels, self.dataset.get_train_labels())
-        test_labels = self.dataset.get_test_labels()
+        self.sess.run(self.isTrain_node.assign(False))
         with self.sess.as_default():
-            self.sess.run(self.isTrain_node.assign(False))
+            train_pred, train_acc = self.eval_set(self.dataset.get_train_set(), self.dataset.get_train_labels())
+            self.logger.info('Train accuracy: %.3f' % train_acc)
 
-            self.logger.info('Train accuracy: %.3f' % self.accuracy(self.prediction.eval(
-                                 feed_dict={self.data_node_ph: self.dataset.get_train_set(), self.keep_prob_ph : 1}),
-                                                                    self.dataset.get_train_labels()))
+            if self.dataset.validation_set_exist:
+                valid_pred, valid_acc = self.eval_set(self.dataset.get_validation_set(), self.dataset.get_validation_labels())
+                self.logger.info('Validation accuracy: %.3f' % valid_acc)
+            else:
+                valid_pred, valid_acc = None, None
+                self.logger.info('Validation accuracy: Nan - no validation set, IGNORE')
 
-            self.eval_validation_accuracy()
-
-            test_pred_eval = self.prediction.eval(feed_dict={self.data_node_ph: self.dataset.get_test_set(), self.keep_prob_ph : 1})
-            network_acc = self.accuracy(test_pred_eval, test_labels)
-            self.logger.info('Test accuracy: %.3f' % network_acc)
-        return self.dataset.get_test_set(), (np.argmax(self.dataset.get_test_labels(), 1) + 1), network_acc, test_pred_eval
+            test_pred, test_acc = self.eval_set(self.dataset.get_test_set(), self.dataset.get_test_labels())
+            self.logger.info('Test accuracy: %.3f' % test_acc)
+        return train_acc, valid_acc, test_acc
 
     def get_mini_batch(self):
         offset = (self.mini_batch_step * self.batch_size)
@@ -251,17 +260,15 @@ class NeuralNet(object):
         else:
             self.logger.info("reshuffle is OFF")
 
+    def eval_set(self, dataset, labels):
+        predictions = self.prediction.eval(feed_dict={self.data_node_ph: dataset, self.keep_prob_ph: 1})
+        accuracy = self.accuracy(predictions, labels)
+        return predictions, accuracy
+
     @staticmethod
     def accuracy(predictions, labels):
         assert not np.array_equal(labels, None)
         return 1.0 * np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1)) / predictions.shape[0]
-
-    def eval_validation_accuracy(self):
-        if self.dataset.validation_set_exist:
-            valid_acc = self.prediction.eval(feed_dict={self.data_node_ph: self.dataset.get_validation_set(), self.keep_prob_ph: 1})
-            self.logger.info('Validation accuracy: %.3f' % self.accuracy(valid_acc, self.dataset.get_validation_labels()))
-        else:
-            self.logger.info('Validation accuracy: Nan - no validation set, IGNORE')
 
     @staticmethod
     def run_baseline(train_set, train_labels, test_set, test_labels):
@@ -279,6 +286,25 @@ class NeuralNet(object):
         grads_and_vars_rescaled = [(tf.clip_by_norm(gv[0], clip_constant), gv[1]) for gv in grads_and_vars]
         train_op_net = optimizer.apply_gradients(grads_and_vars_rescaled)
         return train_op_net
+
+    def find_best_accuracy(self, valid_acc_l, test_acc_l):
+        val_acc_ma_l = []
+        moving_average_win_size = 10
+        best_val_acc_value = 0.0
+        best_val_acc_ind = 0
+        for i in xrange(10, self.params['number of epochs']):
+            val_acc_ma = float(np.mean(np.asarray(valid_acc_l[-1*moving_average_win_size :])))
+            assert(val_acc_ma <= 1.0)
+            val_acc_ma_l.append(val_acc_ma)
+            if val_acc_ma >= best_val_acc_value:
+                best_val_acc_value = val_acc_ma
+                best_val_acc_ind = i
+
+        self.logger.info('Best moving average validation accuracy appeared in epoch {} and his value is: {}'.format(best_val_acc_ind, best_val_acc_value))
+        self.logger.info('Test accuracy in epoch {} is: {}'.format(best_val_acc_ind, test_acc_l[best_val_acc_ind]))
+
+        return best_val_acc_ind, best_val_acc_value, test_acc_l[best_val_acc_ind]
+
 
     def set_batch_size(self, batch_size):
         self.batch_size = batch_size
@@ -339,7 +365,7 @@ if __name__ == '__main__':
     # params['number of epochs'] = 0
     # params['check point flag'] = 1
     # params['check point name'] = './results/unitest2'
-    params['batch norm'] = 1
+    params['batch norm'] = 0
     if params['random seeds'] == 1:
         params['tf seed'] = random.randint(1, 2**31)
         params['np seed'] = random.randint(1, 2**31)
@@ -372,8 +398,9 @@ if __name__ == '__main__':
     #                                                                 arabic_model.dataset.test_set,
     #                                                                 arabic_model.dataset.test_labels))
     model.build_model()
-    model.train_model()
-    test_set, test_labels, network_acc, test_pred_eval = model.eval_model()
+    train_acc_l, valid_acc_l, test_acc_l = model.train_model()
+    train_acc, valid_acc, test_acc = model.eval_model()
+    index, valid_acc_ma_at_ind, test_acc_at_ind = model.find_best_accuracy(valid_acc_l, test_acc_l)
     # arabic_model.dataset.pca_scatter_plot(arabic_model.test_embed_vec_result)
 
     if model.params['check point flag']:
