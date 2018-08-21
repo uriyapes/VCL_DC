@@ -39,13 +39,13 @@ class TestModel(unittest.TestCase):
         assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
         dataset_dict = param_manager.DatasetParams(json_path).dict
 
-        keep_prob = 0.5
-        # depth of 5
-        hidden_size_list = [256, 256, 256, 256]
-        dropout_hidden_list = [0, 0, 0, keep_prob]
+        # keep_prob = 0.5
+        # # depth of 5
+        # hidden_size_list = [256, 256, 256, 256]
+        # dropout_hidden_list = [0, 0, 0, keep_prob]
 
         dataset = parse_image_seg.Dataset(dataset_dict)
-        model = NeuralNet(hidden_size_list, dropout_hidden_list, dataset, self.logger, self.params)
+        model = NeuralNet(dataset, self.logger, self.params)
 
         model.build_model()
         model.train_model()
@@ -61,15 +61,15 @@ class TestModel(unittest.TestCase):
         assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
         dataset_dict = param_manager.DatasetParams(json_path).dict
 
-        keep_prob = 0.5
-        # depth of 5
-        hidden_size_list = [256, 256, 256, 256]
-        dropout_hidden_list = [0, 0, 0, keep_prob]
+        # keep_prob = 0.5
+        # # depth of 5
+        # hidden_size_list = [256, 256, 256, 256]
+        # dropout_hidden_list = [0, 0, 0, keep_prob]
 
         dataset = parse_image_seg.Dataset(dataset_dict)
         params = self.params
         params['number of epochs'] = 0
-        model = NeuralNet(hidden_size_list, dropout_hidden_list, dataset, self.logger, params)
+        model = NeuralNet(dataset, self.logger, params)
 
         model.build_model()
         model.train_model()

@@ -59,7 +59,7 @@ class ModelParams(Params):
                             random_seeds_flag=1, tf_seed=230, np_seed=100, num_of_epochs=500, ckpt_flag=0, ckpt_file_name=None):
         dict = {}
         dict['batch norm'] = batch_norm
-        dict['keep prob for dropout'] = keep_prob
+        dict['dropout keep prob'] = keep_prob
         dict['depth'] = num_of_layers
         dict['activation'] = activation
         dict['vcl'] = use_vcl
@@ -136,6 +136,12 @@ def unitest():
     model_params.update(json_path_template)
     model_params.dict['vcl'] = 1
     json_path = os.path.join("./Params", 'vcl.json')
+    model_params.save(json_path)
+
+    model_params.update(json_path_template)
+    model_params.dict['activation'] = 'SELU'
+    model_params.dict['dropout keep prob'] = 0.95
+    json_path = os.path.join("./Params", 'selu.json')
     model_params.save(json_path)
 
     # Create image segmentation dataset params

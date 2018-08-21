@@ -14,7 +14,17 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--params_dir', default='./Params', help="directory containing .json file detailing the model params")
 
 class NeuralNet(object):
-    def __init__(self, hidden_size_list, dropout_hidden_list, dataset, logger, model_params):
+    def __init__(self, dataset, logger, model_params):
+        self.params = model_params
+        # TODO: add support for different dropout rates in different layers
+        keep_prob = 0.5
+        # depth of 5
+        hidden_size_list = [256] * self.params['depth']
+        if self.params['activation'] != 'SELU':
+            dropout_hidden_list = [0] * self.params['depth']
+            dropout_hidden_list[-1] = self.params['dropout keep prob']
+        else:
+            dropout_hidden_list = [self.params['dropout keep prob']] * self.params['depth']
         # Make sure the dropout list size is equal to the hidden list size, both of them ignore the last layer
         assert(len(dropout_hidden_list) == len(hidden_size_list))
         # No dropout allowed in the last layer
@@ -26,7 +36,7 @@ class NeuralNet(object):
         self.learning_rate_update_at_epoch = 200
         self.learning_rate_updated = 1e-3
         self.dataset = dataset
-        self.params = model_params
+
 
     def build_model(self):
         T, D = self.dataset.get_dimensions()
@@ -122,6 +132,10 @@ class NeuralNet(object):
         dropout_flag = self.dropout_l[layer_index] != 0
         if self.params['activation'] == 'RELU':
             activation = tf.nn.relu
+        elif self.params['activation'] == 'ELU':
+            activation = tf.nn.elu
+        elif self.params['activation'] == 'SELU':
+            activation = tf.nn.selu
         else:
             assert 0
 
@@ -152,7 +166,10 @@ class NeuralNet(object):
             if activation:
                 output = activation(output)
             if dropout:
-                output = tf.nn.dropout(output, self.keep_prob_ph)
+                if self.params['activation'] != 'SELU':
+                    output = tf.nn.dropout(output, self.keep_prob_ph)
+                elif self.params['activation'] == 'SELU':
+                    output = tf.contrib.nn.alpha_dropout(output, self.keep_prob_ph)
 
             return output
 
@@ -357,7 +374,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
     # json_filename = 'model_params_template.json'
     # json_filename = 'unitest_params1.json'
-    json_filename = 'vcl.json'
+    # json_filename = 'vcl.json'
+    json_filename = 'selu.json'
     json_path = os.path.join(args.params_dir, json_filename)
     assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
     params = param_manager.ModelParams(json_path).dict
@@ -365,7 +383,8 @@ if __name__ == '__main__':
     # params['number of epochs'] = 0
     # params['check point flag'] = 1
     # params['check point name'] = './results/unitest2'
-    params['batch norm'] = 0
+    # params['batch norm'] = 0
+    # params['activation'] = 'ELU'
     if params['random seeds'] == 1:
         params['tf seed'] = random.randint(1, 2**31)
         params['np seed'] = random.randint(1, 2**31)
@@ -378,30 +397,15 @@ if __name__ == '__main__':
     dataset_dict = param_manager.DatasetParams(json_path).dict
     # dataset_dict['fold'] = 2
 
-    # TODO: add support for different dropout rates in different layers
-    keep_prob = 0.5
-    #depth of 5
-    hidden_size_list = [256, 256, 256, 256]
-    dropout_hidden_list = [0, 0, 0, keep_prob]
-    #depth of 8
-    # hidden_size_list = [256]*8
-    # dropout_hidden_list = [0, 0, 0, 0, 0, 0, 0, keep_prob]
-    #depth of 16
-    # hidden_size_list = [256] * 15
-    # dropout_hidden_list = [0] *14 +[keep_prob]
-    dataset = parse_image_seg.Dataset(dataset_dict)
-    model = NeuralNet(hidden_size_list, dropout_hidden_list, dataset, logger, params)
 
-    # arabic_model.dataset.pca_scatter_plot(arabic_model.dataset.test_set)
-    # logger.info('1NN Baseline accuarcy: %.3f' % arabic_model.run_baseline(arabic_model.dataset.train_set,
-    #                                                                 arabic_model.dataset.train_labels,
-    #                                                                 arabic_model.dataset.test_set,
-    #                                                                 arabic_model.dataset.test_labels))
+    dataset = parse_image_seg.Dataset(dataset_dict)
+    logger.info('Create model with the following parameters:\n{}'.format(str(params)))
+    model = NeuralNet(dataset, logger, params)
+
     model.build_model()
     train_acc_l, valid_acc_l, test_acc_l = model.train_model()
     train_acc, valid_acc, test_acc = model.eval_model()
     index, valid_acc_ma_at_ind, test_acc_at_ind = model.find_best_accuracy(valid_acc_l, test_acc_l)
-    # arabic_model.dataset.pca_scatter_plot(arabic_model.test_embed_vec_result)
 
     if model.params['check point flag']:
         model.save_variables(model.params['check point name'])
