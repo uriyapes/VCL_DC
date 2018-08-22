@@ -11,10 +11,11 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('--params_dir', default='./Params', help="directory containing .json file detailing the model and datasets params")
 
-#  TODO: ...
+
 def get_model(dataset, logger, model_params):
     model = NeuralNet(dataset, logger, model_params)
     return model
+
 
 def init_model(model):
     model.build_model()

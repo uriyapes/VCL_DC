@@ -5,7 +5,7 @@ import argparse
 import random
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--dataset_dir', default='/home/a/Downloads/UCI_from_Michael/data/image-segmentation/', help="directory containing .json file detailing the dataset params")
+parser.add_argument('--dataset_dir', default='./datasets/image-segmentation/', help="directory containing .json file detailing the dataset params")
 
 
 class Params(object):
