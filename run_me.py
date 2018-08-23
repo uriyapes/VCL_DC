@@ -7,6 +7,7 @@ import numpy as np
 import os
 from datetime import datetime
 import argparse
+import logging #TODO: remove from here
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--params_dir', default='./Params', help="directory containing .json file detailing the model and datasets params")
@@ -49,7 +50,7 @@ def run_model_multiple_times(dataset_dict, dataset_folds_list, num_of_model_runs
     for j in xrange(len(dataset_folds_list)):
         dataset_dict['fold'] = dataset_folds_list[j]
         for i in xrange(num_of_model_runs):
-            logger = my_utilities.set_a_logger(str(log_num), dirpath=results_dir_path, filename='run_{}_fold_{}.log'.format(i,j))
+            logger = my_utilities.set_a_logger(str(log_num), dirpath=results_dir_path, filename='run_{}_fold_{}.log'.format(i,j), console_level=logging.WARNING, file_level=logging.WARNING)
             log_num += 1
             logger.info('Start logging')
             logger.info('########## Number of model run: {0} ##########'.format(i))
