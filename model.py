@@ -1,14 +1,12 @@
 import tensorflow as tf
 from tensorflow.contrib.layers.python.layers import batch_norm
 import parse_image_seg2 as parse_image_seg
-import nearest_neighbor
 import numpy as np
 import argparse
 import my_utilities
 import param_manager
 import os
 from datetime import datetime
-import random
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--params_dir', default='./Params', help="directory containing .json file detailing the model params")
@@ -289,11 +287,6 @@ class NeuralNet(object):
     def accuracy(predictions, labels):
         assert not np.array_equal(labels, None)
         return 1.0 * np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1)) / predictions.shape[0]
-
-    @staticmethod
-    def run_baseline(train_set, train_labels, test_set, test_labels):
-        nn = nearest_neighbor.NearestNeighbor()
-        return nn.compute_one_nearest_neighbor_accuracy(train_set, train_labels, test_set, test_labels)
 
     @staticmethod
     def build_optimizer(lr_node, loss):
