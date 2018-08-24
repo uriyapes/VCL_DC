@@ -35,12 +35,14 @@ class Dataset(object):
 
     def __init__(self, dataset_dict):
         self.dict = dataset_dict
-        self.name = self.dict['name']
 
         # data, labels = self.file_to_dataset(self.dict['FILENAME_DATA'])
         data = np.genfromtxt(self.dict['FILENAME_DATA'], delimiter=',', dtype='float32')
         labels = np.genfromtxt(self.dict['FILENAME_LABELS'], delimiter=',', dtype='float32')
         # labels = self._map_class_str_to_num(labels)
+        self.min_label = np.min(labels)
+        self.max_label = np.max(labels)
+        self.num_labels = self.max_label - self.min_label + 1
 
         if data.ndim == 2:
             N, T = data.shape
@@ -85,15 +87,14 @@ class Dataset(object):
         # #update T in case we removed some features
         self.T = train_set.shape[1]
 
-        self.validation_labels = self.encode_one_hot(validation_labels)
-        self.validation_set = validation_set
-
         self.train_labels = self.encode_one_hot(train_labels)
+        self.validation_labels = self.encode_one_hot(validation_labels)
         self.test_labels = self.encode_one_hot(test_labels)
 
-
-        self.train_set = train_set
-        self.test_set = test_set
+        self.train_set = train_set.astype(np.float32)
+        self.train_ind = np.arange(0, self.train_set.shape[0])
+        self.validation_set = validation_set.astype(np.float32)
+        self.test_set = test_set.astype(np.float32)
 
 
     def norm_input(self, train_set, test_set):
@@ -196,7 +197,6 @@ class Dataset(object):
         assert samples[0, 0] == np.float32(0.207173)
         assert samples[1, 0] == np.float32(0.854911)
         assert samples[N - 1, T - 1] == np.float32(-0.427312868586892)
-        assert np.max(labels) == max_label
 
     @classmethod
     def generate_balanced_splits(cls, samples, labels, ratio_test_samples):
@@ -274,10 +274,9 @@ class Dataset(object):
         round_ratio = 1.0 * req_length / N
         return round_ratio
 
-    @staticmethod
-    def encode_one_hot(class_labels):
+    def encode_one_hot(self, class_labels):
         labels_one_hot = \
-            (np.arange(min_label, max_label + 1) ==
+            (np.arange(self.min_label, self.max_label + 1) ==
              class_labels[:, None]).astype(np.float32)
         return labels_one_hot
 
@@ -312,7 +311,8 @@ class Dataset(object):
         return vector[permutations]
 
     def re_shuffle(self):
-        self.train_set, self.train_labels = self.shuffle2(self.train_set, self.train_labels)
+        self.train_ind = self.shuffle(self.train_ind)
+        # self.train_set, self.train_labels = self.shuffle2(self.train_set, self.train_labels)
 
     @classmethod
     def shuffle2(cls, dataset, labels_one_hot):
@@ -323,22 +323,22 @@ class Dataset(object):
         return dataset, labels_one_hot
 
     def get_train_set(self):
-        return self.train_set.astype(np.float32)
+        return self.train_set[self.train_ind, :]
 
     def get_validation_set(self):
-        return self.validation_set.astype(np.float32)
+        return self.validation_set
 
     def get_test_set(self):
-        return self.test_set.astype(np.float32)
+        return self.test_set
 
     def get_dimensions(self):
         return (self.T, self.D)
 
     def get_num_of_labels(self):
-        return num_labels
+        return self.num_labels
 
     def get_train_labels(self):
-        return self.train_labels
+        return self.train_labels[self.train_ind, :]
 
     def get_validation_labels(self):
         return self.validation_labels

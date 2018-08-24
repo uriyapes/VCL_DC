@@ -5,7 +5,7 @@ import argparse
 import random
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--dataset_dir', default='./datasets/image-segmentation/', help="directory containing .json file detailing the dataset params")
+parser.add_argument('--datasets_dir', default='./datasets', help="directory containing .json file detailing the dataset params")
 
 
 class Params(object):
@@ -83,14 +83,22 @@ class DatasetParams(Params):
 
     @classmethod
     def _create_default_model_params(cls):
+        return cls.create_model_params()
+
+    @classmethod
+    def create_model_params(cls, dataset_name='image-segmentation', filename_labels='labels_py.dat',
+                            filename_indexes_test='folds_py.dat', filename_validation_indexes='validation_folds_py.dat',
+                            assert_values_flag=True):
         args = parser.parse_args()
         dict = {}
-        dict['name'] = 'image_segmentation'
-        dict['FILENAME_DATA'] = os.path.join(args.dataset_dir, 'image-segmentation_py.dat')
-        dict['FILENAME_LABELS'] = os.path.join(args.dataset_dir, 'labels_py.dat')
-        dict['FILENAME_INDEXES_TEST'] = os.path.join(args.dataset_dir, 'folds_py.dat')
-        dict['FILENAME_VALIDATION_INDEXES'] = os.path.join(args.dataset_dir, 'validation_folds_py.dat')
-        dict['assert_values_flag'] = True
+        folder_path = os.path.join(args.datasets_dir, dataset_name)
+        dict['dataset_name'] = dataset_name
+        filename_data = dataset_name + "_py.dat"
+        dict['FILENAME_DATA'] = os.path.join(folder_path, filename_data)
+        dict['FILENAME_LABELS'] = os.path.join(folder_path, filename_labels)
+        dict['FILENAME_INDEXES_TEST'] = os.path.join(folder_path, filename_indexes_test)
+        dict['FILENAME_VALIDATION_INDEXES'] = os.path.join(folder_path, filename_validation_indexes)
+        dict['assert_values_flag'] = assert_values_flag
         dict['validation_train_ratio'] = 5.0
         dict['test_alldata_ratio'] = 300.0 / 330
         dict['fold'] = 1
@@ -156,6 +164,12 @@ def gen_param_files():
     DatasetParams.create_json_param_file(json_path)
     image_segmentation_params = DatasetParams(json_path)
     print image_segmentation_params.dict
+
+    # Create image segmentation dataset params
+    json_path = os.path.join("./Params", 'abalone.json')
+    abalone_params = DatasetParams.create_model_params(dataset_name='abalone', assert_values_flag=False)
+    save_dict_to_json(abalone_params, json_path)
+
 
 if __name__ == '__main__':
     # pass

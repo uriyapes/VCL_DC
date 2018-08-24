@@ -205,18 +205,18 @@ class NeuralNet(object):
         prev_epoch = -1
         step = 0
         self.initial_train_labels = np.copy(self.dataset.get_train_labels())
-        dropout = self.dropout_l[-1]
+        feed_dict = {self.keep_prob_ph: self.dropout_l[-1]}
+
         self.sess = tf.Session()
         self.sess.run(tf.global_variables_initializer())
-        with self.sess.as_default():
+        with self.sess.as_default(): # Note: This statement open a context manager of sess and not sess itself so after exiting the with need to manually close self.sess
             self.logger.info('Initialized')
             self.mini_batch_step = 0
             while self.epoch < self.params['number of epochs']:
 
                 step += 1
-                batch_data, batch_labels = self.get_mini_batch()
-                feed_dict = {self.data_node_ph: batch_data, self.tf_train_labels : batch_labels,
-                             self.keep_prob_ph : dropout, self.learning_rate_ph: self.learning_rate}
+                feed_dict[self.data_node_ph], feed_dict[self.tf_train_labels] = self.get_mini_batch()
+                feed_dict[self.learning_rate_ph] = self.learning_rate
                 _, l, predictions = self.sess.run(
                     [self.optimizer, self.loss, self.prediction], feed_dict=feed_dict)
                 if (prev_epoch != self.epoch):
@@ -234,6 +234,7 @@ class NeuralNet(object):
         self.dataset.count_classes_for_all_datasets()
         #self.dataset.count_classes(batch_labels)
         self.logger.info("Training stopped at epoch: %i" % self.epoch)
+        self.sess.close()
         return train_acc_l, valid_acc_l, test_acc_l
 
 
@@ -263,10 +264,10 @@ class NeuralNet(object):
             self.mini_batch_step = 0
             self.new_epoch_update()
 
-        batch_data = self.dataset.train_set[offset:(offset + self.batch_size), :]
-        batch_labels = self.dataset.train_labels[offset:(offset + self.batch_size), :]
         self.mini_batch_step += 1
-        return batch_data, batch_labels
+        # returns data batch and batch labels
+        return self.dataset.train_set[offset:(offset + self.batch_size), :],\
+               self.dataset.train_labels[offset:(offset + self.batch_size), :]
 
     def new_epoch_update(self):
         self.epoch += 1
@@ -368,10 +369,10 @@ if __name__ == '__main__':
     logger.info('Start logging')
     # Load the parameters from json file
     args = parser.parse_args()
-    # json_filename = 'model_params_template.json'
+    json_filename = 'model_params_template.json'
     # json_filename = 'unitest_params1.json'
     # json_filename = 'vcl.json'
-    json_filename = 'selu.json'
+    # json_filename = 'selu.json'
     json_path = os.path.join(args.params_dir, json_filename)
     assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
     params = param_manager.ModelParams(json_path).dict
@@ -383,7 +384,8 @@ if __name__ == '__main__':
     # params['activation'] = 'ELU'
 
 
-    json_path = os.path.join(args.params_dir, 'image_segmentation_params.json')
+    # json_path = os.path.join(args.params_dir, 'image_segmentation_params.json')
+    json_path = os.path.join(args.params_dir, 'abalone.json')
     assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
     dataset_dict = param_manager.DatasetParams(json_path).dict
     # dataset_dict['fold'] = 2
@@ -393,8 +395,8 @@ if __name__ == '__main__':
 
     model.build_model()
     train_acc_l, valid_acc_l, test_acc_l = model.train_model()
-    train_acc, valid_acc, test_acc = model.eval_model()
-    index, train_acc_at_ind, valid_acc_ma_at_ind, test_acc_at_ind = model.find_best_accuracy(valid_acc_l, test_acc_l)
+    # train_acc, valid_acc, test_acc = model.eval_model()
+    index, train_acc_at_ind, valid_acc_ma_at_ind, test_acc_at_ind = model.find_best_accuracy(train_acc_l, valid_acc_l, test_acc_l)
 
     if model.params['check point flag']:
         model.save_variables(model.params['check point name'])

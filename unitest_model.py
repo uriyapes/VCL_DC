@@ -40,7 +40,6 @@ class TestModel(unittest.TestCase):
 
         model.build_model()
         model.train_model()
-        model.eval_model()
         checkpoint_path = "./results/unitest1.ckpt"
         self.compare_to_ckpt(model, checkpoint_path)
 
@@ -59,7 +58,6 @@ class TestModel(unittest.TestCase):
 
         model.build_model()
         model.train_model()
-        model.eval_model()
         checkpoint_path = "./results/unitest_init.ckpt"
         self.compare_to_ckpt(model, checkpoint_path)
 
