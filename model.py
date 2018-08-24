@@ -202,7 +202,7 @@ class NeuralNet(object):
         test_acc_l = []
         self.tf_saver = tf.train.Saver()
         self.epoch = 0
-        prev_epoch = -1
+        prev_epoch = 0
         step = 0
         self.initial_train_labels = np.copy(self.dataset.get_train_labels())
         feed_dict = {self.keep_prob_ph: self.dropout_l[-1]}
@@ -307,7 +307,7 @@ class NeuralNet(object):
         best_val_acc_value = 0.0
         best_val_acc_ind = 0
         for i in xrange(10, self.params['number of epochs']):
-            val_acc_ma = float(np.mean(np.asarray(valid_acc_l[-1*moving_average_win_size :])))
+            val_acc_ma = float(np.mean(np.asarray(valid_acc_l[(i-moving_average_win_size):i])))
             assert(val_acc_ma <= 1.0)
             val_acc_ma_l.append(val_acc_ma)
             if val_acc_ma >= best_val_acc_value:

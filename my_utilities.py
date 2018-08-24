@@ -21,7 +21,7 @@ def set_a_logger(log_name='log', dirpath="./", filename=None, console_level=logg
     """
 
     assert type(log_name) == str
-    assert type(dirpath) == str
+    assert type(dirpath) == str or type(dirpath) == unicode
     assert type(console_level) == int
     assert type(file_level) == int
 

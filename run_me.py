@@ -50,7 +50,8 @@ def run_model_multiple_times(dataset_dict, dataset_folds_list, num_of_model_runs
     for j in xrange(len(dataset_folds_list)):
         dataset_dict['fold'] = dataset_folds_list[j]
         for i in xrange(num_of_model_runs):
-            logger = my_utilities.set_a_logger(str(log_num), dirpath=results_dir_path, filename='run_{}_fold_{}.l       og'.format(i,j), console_level=logging.WARNING, file_level=logging.WARNING)
+            logger = my_utilities.set_a_logger(str(log_num), dirpath=results_dir_path, filename='run_{}_fold_{}.log'.format(i,j),
+                                               console_level=logging.DEBUG, file_level=logging.DEBUG)
             log_num += 1
             logger.info('Start logging')
             logger.info('########## Number of model run: {0} ##########'.format(i))
@@ -86,8 +87,11 @@ def choose_activation_regularizer(activation_regularizer):
 
 
 def run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs_per_config, depth_list, activation_list, activation_regu_list):
-    timestamp = str(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-    path_results_dir = r"./results/" + timestamp
+    timestamp = str(datetime.now().strftime('%Y_%m_%d__%H-%M-%S'))
+    path_results_per_dataset = r"./results/" + dataset_dict['dataset_name']
+    if not os.path.isdir(path_results_per_dataset):
+        os.mkdir(path_results_per_dataset)
+    path_results_dir = os.path.join(path_results_per_dataset, timestamp)
     os.mkdir(path_results_dir)
     summary_result_filename = os.path.join(path_results_dir, "avg_results_over_{}_runs_over_{}_folds.csv".format(model_runs_per_config, len(dataset_folds_list)))
     write_results_to_csv_as_row(['activation', 'regularizer', 'depth', 'train accuracy', 'validation accuracy',
@@ -109,7 +113,7 @@ def run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs
                 # TODO: create params inside run_model_multiple_times(..) func so each time we will get different seeds.
                 # TODO: think about a better way to use ModelParams, maybe when creating the object a dict will be created automatically
                 params = param_manager.ModelParams.create_model_params(batch_norm=batch_norm, activation=activation, keep_prob=dropout_keep_prob,
-                                                                       use_vcl=use_vcl, num_of_layers=depth)
+                                                                       use_vcl=use_vcl, num_of_layers=depth, num_of_epochs=500)
                 param_file = os.path.join(path_run_info, "param.json")
                 param_manager.save_dict_to_json(params, param_file)
 
@@ -132,12 +136,12 @@ def run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    json_path = os.path.join(args.params_dir, 'image_segmentation_params.json')
+    json_path = os.path.join(args.params_dir, 'abalone.json')
     assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
     dataset_dict = param_manager.DatasetParams(json_path).dict
 
     model_runs_per_config = 1
-    dataset_folds_list = [0,2,3]
+    dataset_folds_list = [0, 1, 2, 3]
     depth_list = [4, 8, 16]
     activation_list = ['RELU', 'ELU', 'SELU']
     activation_regu_list = ['no regularizer', 'batch norm', 'vcl']
