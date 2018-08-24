@@ -50,7 +50,7 @@ def run_model_multiple_times(dataset_dict, dataset_folds_list, num_of_model_runs
     for j in xrange(len(dataset_folds_list)):
         dataset_dict['fold'] = dataset_folds_list[j]
         for i in xrange(num_of_model_runs):
-            logger = my_utilities.set_a_logger(str(log_num), dirpath=results_dir_path, filename='run_{}_fold_{}.log'.format(i,j), console_level=logging.WARNING, file_level=logging.WARNING)
+            logger = my_utilities.set_a_logger(str(log_num), dirpath=results_dir_path, filename='run_{}_fold_{}.l       og'.format(i,j), console_level=logging.WARNING, file_level=logging.WARNING)
             log_num += 1
             logger.info('Start logging')
             logger.info('########## Number of model run: {0} ##########'.format(i))
@@ -108,7 +108,7 @@ def run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs
 
                 # TODO: create params inside run_model_multiple_times(..) func so each time we will get different seeds.
                 # TODO: think about a better way to use ModelParams, maybe when creating the object a dict will be created automatically
-                params = param_manager.ModelParams.create_model_params(batch_norm=batch_norm, keep_prob=dropout_keep_prob,
+                params = param_manager.ModelParams.create_model_params(batch_norm=batch_norm, activation=activation, keep_prob=dropout_keep_prob,
                                                                        use_vcl=use_vcl, num_of_layers=depth)
                 param_file = os.path.join(path_run_info, "param.json")
                 param_manager.save_dict_to_json(params, param_file)
@@ -137,7 +137,7 @@ if __name__ == '__main__':
     dataset_dict = param_manager.DatasetParams(json_path).dict
 
     model_runs_per_config = 1
-    dataset_folds_list = [1]
+    dataset_folds_list = [0,2,3]
     depth_list = [4, 8, 16]
     activation_list = ['RELU', 'ELU', 'SELU']
     activation_regu_list = ['no regularizer', 'batch norm', 'vcl']
