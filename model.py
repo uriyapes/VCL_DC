@@ -267,8 +267,8 @@ class NeuralNet(object):
 
         self.mini_batch_step += 1
         # returns data batch and batch labels
-        return self.dataset.train_set[offset:(offset + self.batch_size), :],\
-               self.dataset.train_labels[offset:(offset + self.batch_size), :]
+        return self.dataset.get_train_set()[offset:(offset + self.batch_size), :],\
+               self.dataset.get_train_labels()[offset:(offset + self.batch_size), :]
 
     def new_epoch_update(self):
         self.epoch += 1
