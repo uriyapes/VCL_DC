@@ -136,7 +136,7 @@ def run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    json_path = os.path.join(args.params_dir, 'abalone.json')
+    json_path = os.path.join(args.params_dir, 'contrac.json')
     assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
     dataset_dict = param_manager.DatasetParams(json_path).dict
 

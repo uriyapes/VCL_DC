@@ -171,6 +171,10 @@ def gen_param_files():
     abalone_params = DatasetParams.create_model_params(dataset_name='abalone', assert_values_flag=False)
     save_dict_to_json(abalone_params, json_path)
 
+    json_path = os.path.join("./Params", 'contrac.json')
+    abalone_params = DatasetParams.create_model_params(dataset_name='contrac', assert_values_flag=False)
+    save_dict_to_json(abalone_params, json_path)
+
 
 if __name__ == '__main__':
     # pass
