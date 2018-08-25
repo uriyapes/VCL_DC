@@ -1,0 +1,12 @@
+{
+    "FILENAME_INDEXES_TEST": "./datasets/car/folds_py.dat", 
+    "label_encode_one_hot": true, 
+    "FILENAME_DATA": "./datasets/car/car_py.dat", 
+    "FILENAME_LABELS": "./datasets/car/labels_py.dat", 
+    "fold": 1, 
+    "FILENAME_VALIDATION_INDEXES": "./datasets/car/validation_folds_py.dat", 
+    "test_alldata_ratio": 0.9090909090909091, 
+    "validation_train_ratio": 5.0, 
+    "assert_values_flag": false, 
+    "dataset_name": "car"
+}

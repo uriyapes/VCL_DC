@@ -387,7 +387,7 @@ if __name__ == '__main__':
 
     # json_path = os.path.join(args.params_dir, 'image_segmentation_params.json')
     # json_path = os.path.join(args.params_dir, 'abalone.json')
-    json_path = os.path.join(args.params_dir, 'contrac.json')
+    json_path = os.path.join(args.params_dir, 'car.json')
 
     assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
     dataset_dict = param_manager.DatasetParams(json_path).dict
