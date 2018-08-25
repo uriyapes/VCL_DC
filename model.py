@@ -216,21 +216,22 @@ class NeuralNet(object):
 
                 step += 1
                 feed_dict[self.data_node_ph], feed_dict[self.tf_train_labels] = self.get_mini_batch()
-                feed_dict[self.learning_rate_ph] = self.learning_rate
-                _, l, predictions = self.sess.run(
-                    [self.optimizer, self.loss, self.prediction], feed_dict=feed_dict)
                 if (prev_epoch != self.epoch):
-                    prev_epoch = self.epoch
                     # self.logger.info('batch_labels: {}'.format(np.argmax(batch_labels, 1)))
                     # self.logger.info('predictions: {}'.format(np.argmax(predictions, 1)))
                     # self.logger.info('Minibatch loss at epoch %d: %f' % (self.epoch, l))
                     # self.logger.info('Minibatch accuracy: %.3f' % self.accuracy(predictions, batch_labels))
-                    self.logger.info('epoch %d' % self.epoch)
+                    self.logger.info('epoch %d' % prev_epoch)
                     train_acc, valid_acc, test_acc = self.eval_model()
                     train_acc_l.append(train_acc)
                     valid_acc_l.append(valid_acc)
                     test_acc_l.append(test_acc)
+                    prev_epoch = self.epoch
                     self.sess.run(self.isTrain_node.assign(True))
+
+                feed_dict[self.learning_rate_ph] = self.learning_rate
+                _, l, predictions = self.sess.run(
+                    [self.optimizer, self.loss, self.prediction], feed_dict=feed_dict)
         self.dataset.count_classes_for_all_datasets()
         #self.dataset.count_classes(batch_labels)
         self.logger.info("Training stopped at epoch: %i" % self.epoch)
@@ -312,7 +313,7 @@ class NeuralNet(object):
             val_acc_ma_l.append(val_acc_ma)
             if val_acc_ma >= best_val_acc_value:
                 best_val_acc_value = val_acc_ma
-                best_val_acc_ind = i
+                best_val_acc_ind = i-1 # minus one since valid_acc_l[0:10] don't take index 10 into account and therefore the last index is 10-1
 
         self.logger.info('Best moving average validation accuracy appeared in epoch {} and his value is: {}'.format(best_val_acc_ind, best_val_acc_value))
         self.logger.info('Test accuracy in epoch {} is: {}'.format(best_val_acc_ind, test_acc_l[best_val_acc_ind]))

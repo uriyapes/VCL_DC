@@ -88,7 +88,7 @@ class DatasetParams(Params):
     @classmethod
     def create_model_params(cls, dataset_name='image-segmentation', filename_labels='labels_py.dat',
                             filename_indexes_test='folds_py.dat', filename_validation_indexes='validation_folds_py.dat',
-                            assert_values_flag=True):
+                            assert_values_flag=True, label_encode_one_hot=True):
         args = parser.parse_args()
         dict = {}
         folder_path = os.path.join(args.datasets_dir, dataset_name)
@@ -102,6 +102,7 @@ class DatasetParams(Params):
         dict['validation_train_ratio'] = 5.0
         dict['test_alldata_ratio'] = 300.0 / 330
         dict['fold'] = 1
+        dict['label_encode_one_hot'] = label_encode_one_hot
         return dict
 
 

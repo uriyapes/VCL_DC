@@ -1,5 +1,6 @@
 {
     "FILENAME_INDEXES_TEST": "./datasets/image-segmentation/folds_py.dat", 
+    "label_encode_one_hot": true, 
     "FILENAME_DATA": "./datasets/image-segmentation/image-segmentation_py.dat", 
     "FILENAME_LABELS": "./datasets/image-segmentation/labels_py.dat", 
     "fold": 1, 

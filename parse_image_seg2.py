@@ -27,7 +27,7 @@ class Dataset(object):
         To create the class pass it the dataset_dict.
         dataset_dict = {name: 'image_segmentation', file_names: (<file name train>, <file name test>,
                         <file name validation>), assert_values_flag: <Boolean>, 'validation_train_ratio': <valid_size/train_size>
-                         'test_alldata_ratio' : <test_size / (all_dataset_size}
+                         'test_alldata_ratio' : <test_size / (all_dataset_size, 'label_encode_one_hot' : <Bool>}
         file_names can contain 1,2 or 3 file names, accordingly those files names determine the train/validation/test
         split. If only 1 file is present the split must be determined by the user.
 
@@ -87,9 +87,14 @@ class Dataset(object):
         # #update T in case we removed some features
         self.T = train_set.shape[1]
 
-        self.train_labels = self.encode_one_hot(train_labels)
-        self.validation_labels = self.encode_one_hot(validation_labels)
-        self.test_labels = self.encode_one_hot(test_labels)
+        if self.dict['label_encode_one_hot']:
+            self.train_labels = self.encode_one_hot(train_labels)
+            self.validation_labels = self.encode_one_hot(validation_labels)
+            self.test_labels = self.encode_one_hot(test_labels)
+        else:
+            self.train_labels = train_labels
+            self.validation_labels = validation_labels
+            self.test_labels = test_labels
 
         self.train_set = train_set.astype(np.float32)
         self.train_ind = np.arange(0, self.train_set.shape[0])
@@ -338,7 +343,7 @@ class Dataset(object):
         return self.num_labels
 
     def get_train_labels(self):
-        return self.train_labels[self.train_ind, :]
+        return self.train_labels[self.train_ind]
 
     def get_validation_labels(self):
         return self.validation_labels
