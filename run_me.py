@@ -14,7 +14,7 @@ parser.add_argument('--params_dir', default='./Params', help="directory containi
 
 
 def get_model(dataset, logger, model_params):
-    model = NeuralNet(dataset, logger, model_params)
+    model = NeuralNet(dataset, logger, model_params.dict)
     return model
 
 
@@ -111,11 +111,10 @@ def run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs
 
 
                 # TODO: create params inside run_model_multiple_times(..) func so each time we will get different seeds.
-                # TODO: think about a better way to use ModelParams, maybe when creating the object a dict will be created automatically
-                params = param_manager.ModelParams.create_model_params(batch_norm=batch_norm, activation=activation, keep_prob=dropout_keep_prob,
+                params = param_manager.ModelParams(batch_norm=batch_norm, activation=activation, keep_prob=dropout_keep_prob,
                                                                        use_vcl=use_vcl, num_of_layers=depth, num_of_epochs=500)
                 param_file = os.path.join(path_run_info, "param.json")
-                param_manager.save_dict_to_json(params, param_file)
+                params.save(param_file)
 
 
                 best_index_l, final_train_acc_l, final_valid_acc_l, final_test_acc_l = run_model_multiple_times\
@@ -138,7 +137,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
     json_path = os.path.join(args.params_dir, 'contrac.json')
     assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
-    dataset_dict = param_manager.DatasetParams(json_path).dict
+    dataset_params = param_manager.DatasetParams()
+    dataset_params.update(json_path)
+    dataset_dict = dataset_params.dict
 
     model_runs_per_config = 1
     dataset_folds_list = [0, 1, 2, 3]
