@@ -376,7 +376,9 @@ if __name__ == '__main__':
     # json_filename = 'selu.json'
     json_path = os.path.join(args.params_dir, json_filename)
     assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
-    params = param_manager.ModelParams(json_path).dict
+    model_params = param_manager.ModelParams()
+    model_params.update(json_path)
+    params = model_params.dict
     # params = param_manager.ModelParams.create_model_params(batch_norm=1)
     # params['number of epochs'] = 0
     # params['check point flag'] = 1
@@ -390,7 +392,9 @@ if __name__ == '__main__':
     json_path = os.path.join(args.params_dir, 'car.json')
 
     assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
-    dataset_dict = param_manager.DatasetParams(json_path).dict
+    dataset_params = param_manager.DatasetParams()
+    dataset_params.update(json_path)
+    dataset_dict = dataset_params.dict
     # dataset_dict['fold'] = 2
     dataset = parse_image_seg.Dataset(dataset_dict)
 

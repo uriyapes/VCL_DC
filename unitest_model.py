@@ -21,7 +21,9 @@ class TestModel(unittest.TestCase):
         args = parser.parse_args()
         json_path = os.path.join(args.params_dir, 'unitest_params1.json')
         assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
-        self.params = param_manager.ModelParams(json_path).dict
+        self.model_params = param_manager.ModelParams()
+        self.model_params.update(json_path)
+        self.params = self.model_params.dict
 
         NeuralNet.set_seeds(self.params['tf seed'], self.params['np seed'])
 
@@ -33,8 +35,9 @@ class TestModel(unittest.TestCase):
         args = parser.parse_args()
         json_path = os.path.join(args.params_dir, 'image_segmentation_params.json')
         assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
-        dataset_dict = param_manager.DatasetParams(json_path).dict
-
+        dataset_params = param_manager.DatasetParams()
+        dataset_params.update(json_path)
+        dataset_dict = dataset_params.dict
         dataset = parse_image_seg.Dataset(dataset_dict)
         model = NeuralNet(dataset, self.logger, self.params)
 
@@ -49,7 +52,9 @@ class TestModel(unittest.TestCase):
         args = parser.parse_args()
         json_path = os.path.join(args.params_dir, 'image_segmentation_params.json')
         assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
-        dataset_dict = param_manager.DatasetParams(json_path).dict
+        dataset_params = param_manager.DatasetParams()
+        dataset_params.update(json_path)
+        dataset_dict = dataset_params.dict
 
         dataset = parse_image_seg.Dataset(dataset_dict)
         params = self.params
