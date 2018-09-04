@@ -1,6 +1,7 @@
 import tensorflow as tf
 import numpy as np
 import mnist_dataset
+import time
 
 def weight_variable(shape):
     initial = tf.truncated_normal(shape, stddev=0.1)
@@ -10,7 +11,7 @@ def bias_variable(shape):
     initial = tf.constant(0.1, shape=shape)
     return tf.Variable(initial)
 
-EPOCHS = 10
+EPOCHS = 2
 data_dir = './datasets/MNIST_data'
 batch_size = 50
 
@@ -18,19 +19,28 @@ ds_train = mnist_dataset.train(data_dir)
 ds_seed_init = 1000
 # tf.set_random_seed(tf_seed)
 seed_ph = tf.placeholder(tf.int64, shape=())
-ds_train = ds_train.shuffle(buffer_size=50000, seed=seed_ph)
+ds_train = ds_train.shuffle(buffer_size=50000, seed=seed_ph) # Shuffle before repeat to guarantee data ordering (see https://www.tensorflow.org/performance/datasets_performance)
 ds_train = ds_train.batch(batch_size)
+# ds_train = ds_train.prefetch(batch_size)
+
 ds_train = ds_train.repeat(1)
 # iter = ds_train.make_one_shot_iterator()
-iter = ds_train.make_initializable_iterator()
-features, labels = iter.get_next()
+# iter = ds_train.make_initializable_iterator()
+# features, labels = iter.get_next()
 
 ds_test = mnist_dataset.test(data_dir)
-ds_test = ds_test.batch(batch_size)
-ds_test = ds_test.repeat(1)
-# iter = ds_test.make_one_shot_iterator()
-iter_test = ds_test.make_initializable_iterator()
+ds_test = ds_test.batch(batch_size) # TODO: change to be a placeholder
+ds_test = ds_test.repeat(1) # no repeat since we want to control what happens after every epoch
+
+# Create reinitializable which can be initialized from multiple different Dataset objects.
+# A reinitializable iterator is defined by its structure. We could use the `output_types` and `output_shapes` properties
+#  of either `ds_train` or `ds_test` here, because they are compatible.
+iter = tf.data.Iterator.from_structure(ds_train.output_types, ds_train.output_shapes)
 features, labels = iter.get_next()
+training_init_op = iter.make_initializer(ds_train)
+test_init_op = iter.make_initializer(ds_test)
+
+
 # make a simple model
 # x = tf.placeholder("float", shape=[None, 28 * 28])
 # y_ = tf.placeholder("float", shape=[None, 10])
@@ -72,28 +82,50 @@ train_step = tf.train.AdamOptimizer(1e-3).minimize(loss)
 correct_prediction = tf.equal(tf.cast(tf.argmax(y, 1), tf.int32), labels)
 accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
 
+start_time = time.time()
 with tf.Session() as sess:
     sess.run(tf.global_variables_initializer())
     # all_l1_lists = []
-    for i in range(EPOCHS):
-        sess.run(iter.initializer, feed_dict={seed_ph: tf.cast(i*ds_seed_init, tf.int64)})
+    for epoch in range(EPOCHS):
+        # sess.run(iter.initializer, feed_dict={seed_ph: tf.cast(i*ds_seed_init, tf.int64)})
+        sess.run(training_init_op, feed_dict={seed_ph: np.int64(epoch * ds_seed_init)}) # This guarantee that data is shuffled randomly each epoch but also it is reproducible
 
         # l1, l2 = sess.run([labels, labels])
         # # l1 = sess.run(labels)
         #
         # print l1, l2
         # l1_list = []
+        iter_num = 0
         while True: # while epoch isn't over
+            iter_num += 1
             try:
-                _, acc_val, l1 = sess.run([train_step, accuracy])
+                _, acc_val = sess.run([train_step, accuracy])
+                if iter_num % 200 == 0:
+                    print "accuracy in epoch {} in iteration {} is {}".format(epoch, iter_num, acc_val)
                 # l1 = sess.run([labels])
                 # l1_list.append(l1)
             except tf.errors.OutOfRangeError:
+                print "dataset completed full epoch at iteration: {}".format(iter_num - 1) # minus 1 since last iteration didn't happen
                 break
         # all_l1_lists.append(l1_list)
-        # print "accuracy in the start of epoch {} is {}".format(i, acc_val)
+        print "accuracy in the end of epoch {} is {}".format(epoch, acc_val)
 
-# assert all_l1_lists[0] != all_l1_lists[1]
+        # Test
+        sess.run(test_init_op)
+        iter_num = 0
+        avg_acc = 0.0
+        while True: # while epoch isn't over
+            iter_num += 1
+            try:
+                acc_val, loss_val = sess.run([accuracy, loss])
+                avg_acc += acc_val
+            except tf.errors.OutOfRangeError:
+                print "Finish testing the full test dataset at iteration {}".format(iter_num - 1)
+                print "Test accuracy at epoch {} is: {}".format(epoch, avg_acc/(iter_num - 1)) # minus 1 since last iteration didn't happen
+                break
+
+print "Finished after {} seconds".format(time.time() - start_time)
+
 
 
 
