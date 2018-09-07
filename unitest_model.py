@@ -39,12 +39,12 @@ class TestModel(unittest.TestCase):
         dataset_params.update(json_path)
         dataset_dict = dataset_params.dict
         dataset = parse_image_seg.Dataset(dataset_dict)
+        checkpoint_path = "./results/unitest2.ckpt"
         model = NeuralNet(dataset, self.logger, self.params)
-
-        model.build_model()
-        model.train_model()
-        checkpoint_path = "./results/unitest1.ckpt"
-        self.compare_to_ckpt(model, checkpoint_path)
+        with model:
+            model.build_model()
+            model.train_model()
+            self.compare_to_ckpt(model, checkpoint_path)
 
 
 
@@ -59,12 +59,14 @@ class TestModel(unittest.TestCase):
         dataset = parse_image_seg.Dataset(dataset_dict)
         params = self.params
         params['number of epochs'] = 0
-        model = NeuralNet(dataset, self.logger, params)
-
-        model.build_model()
-        model.train_model()
         checkpoint_path = "./results/unitest_init.ckpt"
-        self.compare_to_ckpt(model, checkpoint_path)
+        model = NeuralNet(dataset, self.logger, params)
+        with model:
+            model.build_model()
+            model.train_model()
+            self.compare_to_ckpt(model, checkpoint_path)
+
+
 
 
 

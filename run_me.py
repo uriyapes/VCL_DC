@@ -60,9 +60,9 @@ def run_model_multiple_times(dataset_dict, dataset_folds_list, num_of_model_runs
             dataset = parse_image_seg.Dataset(dataset_dict)
 
             model = get_model(dataset, logger, model_params)
-            init_model(model)
-
-            index, train_acc_at_ind, valid_acc_ma_at_ind, test_acc_at_ind = run_model(model)
+            with model:
+                init_model(model)
+                index, train_acc_at_ind, valid_acc_ma_at_ind, test_acc_at_ind = run_model(model)
             best_index_l.append(index)
             final_train_acc_l.append(train_acc_at_ind)
             final_valid_acc_l.append(valid_acc_ma_at_ind)

@@ -38,6 +38,16 @@ class NeuralNet(object):
         self.set_seeds(self.params['tf seed'], self.params['np seed'])
 
 
+    def __enter__(self):
+        self.sess = None
+        pass
+
+    def __exit__(self, type, value, traceback):
+        if self.sess is not None:
+            self.sess.close()
+
+
+
     def build_model(self):
         T, D = self.dataset.get_dimensions()
         num_labels = self.dataset.get_num_of_labels()
@@ -235,7 +245,7 @@ class NeuralNet(object):
         self.dataset.count_classes_for_all_datasets()
         #self.dataset.count_classes(batch_labels)
         self.logger.info("Training stopped at epoch: %i" % self.epoch)
-        self.sess.close()
+        # self.sess.close()
         return train_acc_l, valid_acc_l, test_acc_l
 
 
@@ -380,16 +390,16 @@ if __name__ == '__main__':
     model_params.update(json_path)
     params = model_params.dict
     # params = param_manager.ModelParams.create_model_params(batch_norm=1)
-    # params['number of epochs'] = 0
+    # params['number of epochs'] = 5
     # params['check point flag'] = 1
     # params['check point name'] = './results/unitest2'
     # params['batch norm'] = 0
     # params['activation'] = 'ELU'
 
 
-    # json_path = os.path.join(args.params_dir, 'image_segmentation_params.json')
+    json_path = os.path.join(args.params_dir, 'image_segmentation_params.json')
     # json_path = os.path.join(args.params_dir, 'abalone.json')
-    json_path = os.path.join(args.params_dir, 'car.json')
+    # json_path = os.path.join(args.params_dir, 'car.json')
 
     assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
     dataset_params = param_manager.DatasetParams()
@@ -399,11 +409,11 @@ if __name__ == '__main__':
     dataset = parse_image_seg.Dataset(dataset_dict)
 
     model = NeuralNet(dataset, logger, params)
+    with model:
+        model.build_model()
+        train_acc_l, valid_acc_l, test_acc_l = model.train_model()
+        # train_acc, valid_acc, test_acc = model.eval_model()
+        index, train_acc_at_ind, valid_acc_ma_at_ind, test_acc_at_ind = model.find_best_accuracy(train_acc_l, valid_acc_l, test_acc_l)
 
-    model.build_model()
-    train_acc_l, valid_acc_l, test_acc_l = model.train_model()
-    # train_acc, valid_acc, test_acc = model.eval_model()
-    index, train_acc_at_ind, valid_acc_ma_at_ind, test_acc_at_ind = model.find_best_accuracy(train_acc_l, valid_acc_l, test_acc_l)
-
-    if model.params['check point flag']:
-        model.save_variables(model.params['check point name'])
+        if model.params['check point flag']:
+            model.save_variables(model.params['check point name'])
