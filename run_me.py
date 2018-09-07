@@ -103,16 +103,20 @@ def run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs
         for r in xrange(len(activation_regu_list)):
             batch_norm, use_vcl = choose_activation_regularizer(activation_regu_list[r])
             for d in xrange(len(depth_list)):
-                depth = depth_list[d]
-                config_name = "activation_{}_regularizer_{}_depth_{}".format(activation, activation_regu_list[r], depth)
+                hidden_size_list = depth_list[d] * [256]
+                config_name = "activation_{}_regularizer_{}_depth_{}".format(activation, activation_regu_list[r], depth_list[d])
                 # This path is used to save the log information, parameter file and graph variables
                 path_run_info = os.path.join(path_results_dir, config_name)
                 os.mkdir(path_run_info)
 
-
+                if activation != 'SELU':
+                    dropout_hidden_list = [0] * len(hidden_size_list)
+                    dropout_hidden_list[-1] = dropout_keep_prob
+                else:
+                    dropout_hidden_list = [dropout_keep_prob] * depth_list[d]
                 # TODO: create params inside run_model_multiple_times(..) func so each time we will get different seeds.
-                params = param_manager.ModelParams(batch_norm=batch_norm, activation=activation, keep_prob=dropout_keep_prob,
-                                                                       use_vcl=use_vcl, num_of_layers=depth, num_of_epochs=500)
+                params = param_manager.ModelParams(batch_norm=batch_norm, activation=activation, keep_prob_list=dropout_hidden_list,
+                                                   use_vcl=use_vcl, hidden_size_list=hidden_size_list, num_of_epochs=500)
                 param_file = os.path.join(path_run_info, "param.json")
                 params.save(param_file)
 

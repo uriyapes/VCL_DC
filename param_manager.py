@@ -66,12 +66,13 @@ def save_dict_to_json(d, json_path):
         json.dump(d, f, indent=4)
 
 class ModelParams(Params):
-    def __init__(self, batch_norm=False, keep_prob=0.5, num_of_layers=4, activation='RELU', use_vcl=False, vcl_gamma=0.01,
-                            random_seeds_flag=1, tf_seed=230, np_seed=100, num_of_epochs=500, ckpt_flag=0, ckpt_file_name=None):
+    def __init__(self, batch_norm=False, keep_prob_list=[0, 0, 0, 0.5], hidden_size_list=[256, 256, 256, 256],
+                 activation='RELU', use_vcl=False, vcl_gamma=0.01, random_seeds_flag=1, tf_seed=230, np_seed=100,
+                 num_of_epochs=500, ckpt_flag=0, ckpt_file_name=None):
         super(ModelParams, self).__init__()
         self.dict['batch norm'] = batch_norm
-        self.dict['dropout keep prob'] = keep_prob
-        self.dict['depth'] = num_of_layers
+        self.dict['dropout keep prob list'] = keep_prob_list
+        self.dict['hidden size list'] = hidden_size_list
         self.dict['activation'] = activation
         self.dict['vcl'] = use_vcl
         self.dict['gamma'] = vcl_gamma
@@ -85,6 +86,7 @@ class ModelParams(Params):
         self.dict['number of epochs'] = num_of_epochs
         self.dict['check point flag'] = ckpt_flag
         self.dict['check point name'] = ckpt_file_name
+
 
 class DatasetParams(Params):
     def __init__(self, dataset_name='image-segmentation', filename_labels='labels_py.dat',
@@ -142,10 +144,12 @@ def gen_param_files():
     model_params.save(json_path)
 
     model_params.update(json_path_template)
-    model_params.dict['activation'] = 'SELU'
-    model_params.dict['dropout keep prob'] = 0.95
-    json_path = os.path.join("./Params", 'selu.json')
+    model_params.dict['dropout keep prob list'] = [1, 1]
+    model_params.dict['hidden size list'] = [300, 100]
+    json_path = os.path.join("./Params", 'lenet_300_100.json')
     model_params.save(json_path)
+
+
 
     # Create image segmentation dataset params
     json_path = os.path.join("./Params", 'image_segmentation_params.json')
@@ -158,7 +162,7 @@ def gen_param_files():
     image_segmentation_params.dict['dataset_name'] = 'bad name'
     assert image_segmentation_values != image_segmentation_params.dict.values()
 
-    # Create image segmentation dataset params
+    # Create dataset params
     json_path = os.path.join("./Params", 'abalone.json')
     abalone_params = DatasetParams(dataset_name='abalone', assert_values_flag=False)
     abalone_params.save(json_path)
@@ -170,6 +174,9 @@ def gen_param_files():
     json_path = os.path.join("./Params", 'car.json')
     car_params = DatasetParams(dataset_name='car', assert_values_flag=False)
     car_params.save(json_path)
+
+
+
 
 if __name__ == '__main__':
     # pass

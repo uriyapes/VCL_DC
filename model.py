@@ -17,17 +17,10 @@ class NeuralNet(object):
         logger.info('Create model with the following parameters:\n{}'.format(str(self.params)))
         # TODO: add support for different dropout rates in different layers
         # The depth include only the hidden layer, the total number of layers include another classification layer
-        hidden_size_list = [256] * self.params['depth']
-        if self.params['activation'] != 'SELU':
-            dropout_hidden_list = [0] * self.params['depth']
-            dropout_hidden_list[-1] = self.params['dropout keep prob']
-        else:
-            dropout_hidden_list = [self.params['dropout keep prob']] * self.params['depth']
+        self.hidden_size_list = self.params['hidden size list']
+        self.dropout_l = self.params['dropout keep prob list']
         # Make sure the dropout list size is equal to the hidden list size, both of them ignore the last layer
-        assert(len(dropout_hidden_list) == len(hidden_size_list))
-        # No dropout allowed in the last layer
-        self.dropout_l = dropout_hidden_list
-        self.hidden_size_list = hidden_size_list
+        assert(len(self.dropout_l) == len(self.hidden_size_list))
         self.logger = logger
         self.reshuffle_flag = True
         self.learning_rate = 0.01
@@ -380,10 +373,10 @@ if __name__ == '__main__':
     logger.info('Start logging')
     # Load the parameters from json file
     args = parser.parse_args()
-    json_filename = 'model_params_template.json'
+    # json_filename = 'model_params_template.json'
     # json_filename = 'unitest_params1.json'
     # json_filename = 'vcl.json'
-    # json_filename = 'selu.json'
+    json_filename = 'lenet_300_100.json'
     json_path = os.path.join(args.params_dir, json_filename)
     assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
     model_params = param_manager.ModelParams()
