@@ -10,6 +10,10 @@ test_set, test_labels = mnist.test.images, mnist.test.labels
 train_labels = np.int32(train_labels)
 validation_labels = np.int32(validation_labels)
 test_labels = np.int32(test_labels)
+
+min_label = np.min(train_labels)
+max_label = np.max(train_labels)
+num_labels = max_label - min_label + 1
 # print train_labels.shape
 
 # ds_train = tf.data.Dataset.from_tensor_slices((train_set, train_labels)) # BAD since it consumes too much memory (see offical website)
@@ -41,6 +45,7 @@ ds_test = ds_test.repeat(1) # no repeat since we want to control what happens af
 # A reinitializable iterator is defined by its structure. We could use the `output_types` and `output_shapes` properties
 #  of either `ds_train` or `ds_test` here, because they are compatible.
 iter = tf.data.Iterator.from_structure(ds_train.output_types, ds_train.output_shapes)
+print ds_train.output_shapes
 features, labels = iter.get_next()
 training_init_op = iter.make_initializer(ds_train)
 valid_init_op = iter.make_initializer(ds_valid)
@@ -69,7 +74,14 @@ def prepare_test_ds(sess, batch_size):
     sess.run(test_init_op, feed_dict={batch_size_ph: batch_size, _input_data: test_set, input_labels: test_labels})
 
 
+def get_dimensions():
+    instance_attributes = ds_train.output_shapes[0][1].value # In Mnist case this equals 784
+    if type(instance_attributes) == int:
+        num_of_channels = 1
+    else:
+        assert 0
+    return instance_attributes, num_of_channels
 
 
-
-
+def get_num_of_labels():
+    return num_labels

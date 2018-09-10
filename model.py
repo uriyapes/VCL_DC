@@ -7,6 +7,7 @@ import my_utilities
 import param_manager
 import os
 from datetime import datetime
+# import mnist_input_pipe
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--params_dir', default='./Params', help="directory containing .json file detailing the model params")
@@ -53,6 +54,8 @@ class NeuralNet(object):
         self.set_batch_size(batch_size)
         self.set_placeholders()
 
+        # The following constants effects the initialization of other variables so removing them FAILS the unitests.
+        # TODO: remove the following constants and update ckpt file
         self.tf_train_dataset = tf.constant(self.dataset.get_train_set())
         if self.dataset.validation_set_exist:
             self.tf_valid_dataset = tf.constant(self.dataset.get_validation_set())
@@ -60,26 +63,13 @@ class NeuralNet(object):
 
         self.set_architecture_variables(weights_init_type="SELU")
 
-        # Training computation.
-        # Predictions for the training, validation, and test data.
-        # logits = self.model(self.tf_train_minibatch)
-        # self.train_prediction = tf.nn.softmax(logits)
-        #
-        # train_logits_full_set = self.model(self.tf_train_dataset)
-        # self.train_prediction_full_set = tf.nn.softmax(train_logits_full_set)
-        #
-        # if self.dataset.validation_set_exist:
-        #     valid_logits = self.model(self.tf_valid_dataset)
-        #     self.valid_prediction = tf.nn.softmax(valid_logits)
-        #
-        # self.test_logits = self.model(tf_test_dataset)
-        # self.test_prediction = tf.nn.softmax(self.test_logits)
-
-
         logits = self.model()
         self.prediction = tf.nn.softmax(logits)
+        self.correct_prediction = tf.equal(tf.cast(tf.argmax(self.prediction, 1), tf.int32),
+                                           tf.cast(tf.argmax(self.label_node_ph, 1), tf.int32))
+        self.accuracy = tf.reduce_mean(tf.cast(self.correct_prediction, "float"))
         # TODO: change to softmax_cross_entropy_with_logits_v2 when tf is updated
-        self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.tf_train_labels, logits=logits))
+        self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.label_node_ph, logits=logits))
         if self.params['vcl']:
             l2_norm = tf.get_collection('l2_norm')
             l2_norm = tf.add_n(l2_norm)
@@ -199,7 +189,7 @@ class NeuralNet(object):
         tf.add_to_collection('l2_norm', (tf.reduce_mean(tf.square(1 - (var1) / (var2 + eps1)))))
 
 
-    def train_model(self):
+    def train_model(self, ckpt_path = None):
         train_acc_l = []
         valid_acc_l = []
         test_acc_l = []
@@ -207,18 +197,22 @@ class NeuralNet(object):
         self.epoch = 0
         prev_epoch = 0
         step = 0
-        self.initial_train_labels = np.copy(self.dataset.get_train_labels())
+        # TODO: check shuffling is working
+        # self.initial_train_labels = np.copy(self.dataset.get_train_labels())
         feed_dict = {self.keep_prob_ph: self.dropout_l[-1]}
 
         self.sess = tf.Session()
-        self.sess.run(tf.global_variables_initializer())
+        if ckpt_path is None:
+            self.sess.run(tf.global_variables_initializer())
+        else:
+            self.load_variables(ckpt_path)
         with self.sess.as_default(): # Note: This statement open a context manager of sess and not sess itself so after exiting the with need to manually close self.sess
             self.logger.info('Initialized')
             self.mini_batch_step = 0
             while self.epoch < self.params['number of epochs']:
 
                 step += 1
-                feed_dict[self.data_node_ph], feed_dict[self.tf_train_labels] = self.get_mini_batch()
+                feed_dict[self.data_node_ph], feed_dict[self.label_node_ph] = self.get_mini_batch()
                 if (prev_epoch != self.epoch):
                     # self.logger.info('batch_labels: {}'.format(np.argmax(batch_labels, 1)))
                     # self.logger.info('predictions: {}'.format(np.argmax(predictions, 1)))
@@ -233,9 +227,8 @@ class NeuralNet(object):
                     self.sess.run(self.isTrain_node.assign(True))
 
                 feed_dict[self.learning_rate_ph] = self.learning_rate
-                _, l, predictions = self.sess.run(
-                    [self.optimizer, self.loss, self.prediction], feed_dict=feed_dict)
-        self.dataset.count_classes_for_all_datasets()
+                _, l, predictions = self.sess.run([self.optimizer, self.loss, self.prediction], feed_dict=feed_dict)
+        # self.dataset.count_classes_for_all_datasets()
         #self.dataset.count_classes(batch_labels)
         self.logger.info("Training stopped at epoch: %i" % self.epoch)
         # self.sess.close()
@@ -243,20 +236,20 @@ class NeuralNet(object):
 
 
     def eval_model(self):
-        assert ~np.array_equal(self.initial_train_labels, self.dataset.get_train_labels())
+        # assert not np.array_equal(self.initial_train_labels, self.dataset.get_train_labels())
         self.sess.run(self.isTrain_node.assign(False))
-        with self.sess.as_default():
-            train_pred, train_acc = self.eval_set(self.dataset.get_train_set(), self.dataset.get_train_labels())
+        with self.sess.as_default() as sess:
+            train_pred, train_acc = self.eval_set(sess, self.dataset.get_train_set(), self.dataset.get_train_labels())
             self.logger.info('Train accuracy: %.3f' % train_acc)
 
             if self.dataset.validation_set_exist:
-                valid_pred, valid_acc = self.eval_set(self.dataset.get_validation_set(), self.dataset.get_validation_labels())
+                valid_pred, valid_acc = self.eval_set(sess, self.dataset.get_validation_set(), self.dataset.get_validation_labels())
                 self.logger.info('Validation accuracy: %.3f' % valid_acc)
             else:
                 valid_pred, valid_acc = None, None
                 self.logger.info('Validation accuracy: Nan - no validation set, IGNORE')
 
-            test_pred, test_acc = self.eval_set(self.dataset.get_test_set(), self.dataset.get_test_labels())
+            test_pred, test_acc = self.eval_set(sess, self.dataset.get_test_set(), self.dataset.get_test_labels())
             self.logger.info('Test accuracy: %.3f' % test_acc)
         return train_acc, valid_acc, test_acc
 
@@ -283,13 +276,17 @@ class NeuralNet(object):
         else:
             self.logger.info("reshuffle is OFF")
 
-    def eval_set(self, dataset, labels):
-        predictions = self.prediction.eval(feed_dict={self.data_node_ph: dataset, self.keep_prob_ph: 1})
-        accuracy = self.accuracy(predictions, labels)
+    # def eval_set(self sess, dataset, labels):
+    def eval_set(self, sess, data, labels):
+        # predictions = self.prediction.eval(feed_dict={self.data_node_ph: data, self.keep_prob_ph: 1})
+        # accuracy = self.calc_accuracy(predictions, labels)
+        predictions, accuracy = sess.run([self.prediction, self.accuracy], feed_dict={self.data_node_ph: data,
+                                                                                      self.label_node_ph: labels,
+                                                                                      self.keep_prob_ph: 1})
         return predictions, accuracy
 
     @staticmethod
-    def accuracy(predictions, labels):
+    def calc_accuracy(predictions, labels):
         assert not np.array_equal(labels, None)
         return 1.0 * np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1)) / predictions.shape[0]
 
@@ -336,7 +333,7 @@ class NeuralNet(object):
         # Input data placeholders
         self.data_node_ph = tf.placeholder(
             tf.float32, shape=(None, self.dataset.get_dimensions()[0]), name="data_node_placeholder")
-        self.tf_train_labels = tf.placeholder(tf.float32, shape=(self.batch_size, self.dataset.get_num_of_labels()),
+        self.label_node_ph = tf.placeholder(tf.int32, shape=(None, self.dataset.get_num_of_labels()),
                                               name="train_labels_placeholder")
         # hyper-parameters placeholders
         self.keep_prob_ph = tf.placeholder(tf.float32)

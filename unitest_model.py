@@ -71,17 +71,22 @@ class TestModel(unittest.TestCase):
 
 
     def compare_to_ckpt(self, model, checkpoint_path):
+        ckpt_equal_flag = True
         with model.sess.as_default() as sess:
             reader = pywrap_tensorflow.NewCheckpointReader(checkpoint_path)
             var_to_shape_map = reader.get_variable_to_shape_map()
             assert(len(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)) == len(var_to_shape_map))
             for key in var_to_shape_map:
-                self.logger.info('Check variable: ' + key)
                 valid_tensor_value = reader.get_tensor(key)
                 curr_tensor_var = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=key)[0]
                 curr_tensor_value = sess.run(curr_tensor_var)
                 # tf.get_tensor_by_name(key+":0") #not working for some reason, maybe version issues?
-                assert(np.array_equal(curr_tensor_value, valid_tensor_value))
+                if not np.array_equal(curr_tensor_value, valid_tensor_value):
+                    ckpt_equal_flag = False
+                    self.logger.info('Check variable: ' + key + 'Result: FAIL')
+                else:
+                    self.logger.info('Check variable: ' + key + 'Result: Success')
+        assert ckpt_equal_flag
 
 
 if __name__ == '__main__':
