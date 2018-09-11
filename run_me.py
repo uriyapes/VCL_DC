@@ -60,8 +60,9 @@ def run_model_multiple_times(dataset_dict, dataset_folds_list, num_of_model_runs
             logger.info('########## Number of model run: {0} ##########'.format(i))
 
             # TODO: change Dataset so we could do unshuffle and then move it outside the for loop
-            dataset = parse_image_seg.Dataset(dataset_dict)
-
+            # dataset = parse_image_seg.Dataset(dataset_dict)
+            # TODO: mocking the dataset since it's already embedded in model - take care later
+            dataset = None
             model = get_model(dataset, logger, model_params)
             with model:
                 init_model(model)
@@ -118,9 +119,13 @@ def run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs
                 else:
                     dropout_hidden_list = [dropout_keep_prob] * depth_list[d]
 
-                params = param_manager.ModelParams(batch_norm=batch_norm, activation=activation, keep_prob_list=dropout_hidden_list,
-                                                   use_vcl=use_vcl, hidden_size_list=hidden_size_list, num_of_epochs=500)
-                params.dict['number of epochs'] = 15
+                params = param_manager.ModelParams()
+                params_file_name = 'lenet_300_100.json'
+                params_file_path = os.path.join('./Params', params_file_name)
+                params.update(params_file_path)
+                params.dict['batch norm'] = batch_norm
+                params.dict['activation'] = activation
+                params.dict['vcl'] = use_vcl
 
                 best_index_l, final_train_acc_l, final_valid_acc_l, final_test_acc_l = run_model_multiple_times\
                                                          (dataset_dict, dataset_folds_list, model_runs_per_config, params,
@@ -145,10 +150,11 @@ if __name__ == '__main__':
     dataset_params = param_manager.DatasetParams()
     dataset_params.update(json_path)
     dataset_dict = dataset_params.dict
+    dataset_dict['name'] = 'MNIST'
 
     model_runs_per_config = 1
-    dataset_folds_list = [0, 1, 2, 3]
-    depth_list = [4, 8, 16]
+    dataset_folds_list = [0]
+    depth_list = [4]
     activation_list = ['RELU', 'ELU', 'SELU']
     activation_regu_list = ['no regularizer', 'batch norm', 'vcl']
 
