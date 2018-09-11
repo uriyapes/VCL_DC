@@ -77,15 +77,19 @@ class ModelParams(Params):
         self.dict['vcl'] = use_vcl
         self.dict['gamma'] = vcl_gamma
         self.dict['random seeds'] = random_seeds_flag
-        if random_seeds_flag:
-            self.dict['tf seed'] = random.randint(1, 2 ** 31)
-            self.dict['np seed'] = random.randint(1, 2 ** 31)
-        else:
-            self.dict['tf seed'] = tf_seed
-            self.dict['np seed'] = np_seed
+        self.dict['tf seed'] = tf_seed
+        self.dict['np seed'] = np_seed
+        self.randomize_seeds()
         self.dict['number of epochs'] = num_of_epochs
         self.dict['check point flag'] = ckpt_flag
         self.dict['check point name'] = ckpt_file_name
+
+    def randomize_seeds(self):
+        if self.dict['random seeds']:
+            self.dict['tf seed'] = random.randint(1, 2 ** 31)
+            self.dict['np seed'] = random.randint(1, 2 ** 31)
+        else:
+            assert type(self.dict['tf seed']) == int and type(self.dict['np seed']) == int
 
 
 class DatasetParams(Params):

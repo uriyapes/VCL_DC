@@ -50,7 +50,10 @@ def run_model_multiple_times(dataset_dict, dataset_folds_list, num_of_model_runs
     for j in xrange(len(dataset_folds_list)):
         dataset_dict['fold'] = dataset_folds_list[j]
         for i in xrange(num_of_model_runs):
-            logger = my_utilities.set_a_logger(str(log_num), dirpath=results_dir_path, filename='run_{}_fold_{}.log'.format(i,j),
+            model_params.randomize_seeds()
+            param_file = os.path.join(results_dir_path, "param_run_{}_fold_{}.json".format(i, j))
+            model_params.save(param_file)
+            logger = my_utilities.set_a_logger(str(log_num), dirpath=results_dir_path, filename='run_{}_fold_{}.log'.format(i, j),
                                                console_level=logging.DEBUG, file_level=logging.DEBUG)
             log_num += 1
             logger.info('Start logging')
@@ -114,12 +117,9 @@ def run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs
                     dropout_hidden_list[-1] = dropout_keep_prob
                 else:
                     dropout_hidden_list = [dropout_keep_prob] * depth_list[d]
-                # TODO: create params inside run_model_multiple_times(..) func so each time we will get different seeds.
+
                 params = param_manager.ModelParams(batch_norm=batch_norm, activation=activation, keep_prob_list=dropout_hidden_list,
                                                    use_vcl=use_vcl, hidden_size_list=hidden_size_list, num_of_epochs=500)
-                param_file = os.path.join(path_run_info, "param.json")
-                params.save(param_file)
-
 
                 best_index_l, final_train_acc_l, final_valid_acc_l, final_test_acc_l = run_model_multiple_times\
                                                          (dataset_dict, dataset_folds_list, model_runs_per_config, params,
