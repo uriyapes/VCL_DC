@@ -120,6 +120,7 @@ def run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs
 
                 params = param_manager.ModelParams(batch_norm=batch_norm, activation=activation, keep_prob_list=dropout_hidden_list,
                                                    use_vcl=use_vcl, hidden_size_list=hidden_size_list, num_of_epochs=500)
+                params.dict['number of epochs'] = 15
 
                 best_index_l, final_train_acc_l, final_valid_acc_l, final_test_acc_l = run_model_multiple_times\
                                                          (dataset_dict, dataset_folds_list, model_runs_per_config, params,
@@ -130,7 +131,7 @@ def run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs
                 write_results_to_csv_as_row(['validation accuracy'] + final_valid_acc_l, file_name)
                 write_results_to_csv_as_row(['test accuracy'] + final_test_acc_l, file_name)
 
-                result_summary_config = [activation, activation_regu_list[r], depth]
+                result_summary_config = [activation, activation_regu_list[r], depth_list[d]]
                 result_summary = [np.mean(final_train_acc_l), np.mean(final_valid_acc_l), np.mean(final_test_acc_l)]
                 result_summary = result_summary_config + ['{:.3f}'.format(x) for x in result_summary]
 

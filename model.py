@@ -48,7 +48,7 @@ class NeuralNet(object):
         T, D = mnist_input_pipe.get_dimensions()
         num_labels = mnist_input_pipe.get_num_of_labels()
 
-        self.layer_size_l = self.hidden_size_list
+        self.layer_size_l = list(self.hidden_size_list)
         # Add another layer for classification
         self.layer_size_l.append(num_labels)
 
