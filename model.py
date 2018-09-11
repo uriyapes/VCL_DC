@@ -7,7 +7,8 @@ import my_utilities
 import param_manager
 import os
 from datetime import datetime
-# import mnist_input_pipe
+import time
+import mnist_input_pipe
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--params_dir', default='./Params', help="directory containing .json file detailing the model params")
@@ -25,10 +26,11 @@ class NeuralNet(object):
         self.logger = logger
         self.reshuffle_flag = True
         self.learning_rate = 0.01
-        self.learning_rate_update_at_epoch = 200
+        self.learning_rate_update_at_epoch = 1
         self.learning_rate_updated = 1e-3
-        self.dataset = dataset
-        tf.reset_default_graph()
+        # TODO: fix
+        # self.dataset = mnist_input_pipe
+        # tf.reset_default_graph()
         self.set_seeds(self.params['tf seed'], self.params['np seed'])
 
 
@@ -43,33 +45,36 @@ class NeuralNet(object):
 
 
     def build_model(self):
-        T, D = self.dataset.get_dimensions()
-        num_labels = self.dataset.get_num_of_labels()
+        T, D = mnist_input_pipe.get_dimensions()
+        num_labels = mnist_input_pipe.get_num_of_labels()
 
         self.layer_size_l = self.hidden_size_list
         # Add another layer for classification
         self.layer_size_l.append(num_labels)
 
-        batch_size = 20
+        batch_size = 50
         self.set_batch_size(batch_size)
         self.set_placeholders()
 
         # The following constants effects the initialization of other variables so removing them FAILS the unitests.
         # TODO: remove the following constants and update ckpt file
-        self.tf_train_dataset = tf.constant(self.dataset.get_train_set())
-        if self.dataset.validation_set_exist:
-            self.tf_valid_dataset = tf.constant(self.dataset.get_validation_set())
-        self.tf_test_dataset = tf.constant(self.dataset.get_test_set())
+        # self.tf_train_dataset = tf.constant(self.dataset.get_train_set())
+        # if self.dataset.validation_set_exist:
+        #     self.tf_valid_dataset = tf.constant(self.dataset.get_validation_set())
+        # self.tf_test_dataset = tf.constant(self.dataset.get_test_set())
 
         self.set_architecture_variables(weights_init_type="SELU")
 
         logits = self.model()
         self.prediction = tf.nn.softmax(logits)
         self.correct_prediction = tf.equal(tf.cast(tf.argmax(self.prediction, 1), tf.int32),
-                                           tf.cast(tf.argmax(self.label_node_ph, 1), tf.int32))
+                                           mnist_input_pipe.get_labels())
         self.accuracy = tf.reduce_mean(tf.cast(self.correct_prediction, "float"))
         # TODO: change to softmax_cross_entropy_with_logits_v2 when tf is updated
-        self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.label_node_ph, logits=logits))
+        self.loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=mnist_input_pipe.get_labels(), logits=logits)
+        l2_loss = tf.get_collection('l2_loss')
+        l2_loss = tf.add_n(l2_loss)
+        self.loss = self.loss + 0.0001 * l2_loss
         if self.params['vcl']:
             l2_norm = tf.get_collection('l2_norm')
             l2_norm = tf.add_n(l2_norm)
@@ -94,8 +99,8 @@ class NeuralNet(object):
         # first layer parameters
         with tf.variable_scope("Layer_0"):
             # TODO: move the initializer back to the if statment in the start of the method.
-            weights_init = tf.random_normal_initializer(stddev=1 / np.sqrt(self.dataset.get_dimensions()[0]))
-            self.weights_l.append(tf.get_variable('weights', shape=[self.dataset.get_dimensions()[0], self.layer_size_l[0]],
+            weights_init = tf.random_normal_initializer(stddev=1 / np.sqrt(mnist_input_pipe.get_dimensions()[0]))
+            self.weights_l.append(tf.get_variable('weights', shape=[mnist_input_pipe.get_dimensions()[0], self.layer_size_l[0]],
                                                   dtype=tf.float32, initializer=weights_init))
             self.biases_l.append(tf.get_variable('bias', shape=[self.layer_size_l[0]], dtype=tf.float32,
                                              initializer=tf.zeros_initializer()))
@@ -118,7 +123,7 @@ class NeuralNet(object):
 
 
     def model(self):
-        assert(self.layer_size_l[-1] == self.dataset.get_num_of_labels())
+        assert(self.layer_size_l[-1] == mnist_input_pipe.get_num_of_labels())
         assert(len(self.dropout_l) == len(self.layer_size_l)-1)
         layer_l = []
         layer_index = 0
@@ -133,7 +138,7 @@ class NeuralNet(object):
             assert 0
 
         # layer_l.append(tf.nn.relu(tf.matmul(self.data_node_ph, self.weights_l[layer_index]) + self.biases_l[layer_index]))
-        layer_l.append(self.linear(self.data_node_ph, self.weights_l[layer_index], self.biases_l[layer_index], 'Layer_0',
+        layer_l.append(self.linear(mnist_input_pipe.get_data(), self.weights_l[layer_index], self.biases_l[layer_index], 'Layer_0',
                                    dropout_flag, self.params['batch norm'], activation, self.params['vcl']))
         layer_index += 1
 
@@ -196,7 +201,6 @@ class NeuralNet(object):
         self.tf_saver = tf.train.Saver()
         self.epoch = 0
         prev_epoch = 0
-        step = 0
         # TODO: check shuffling is working
         # self.initial_train_labels = np.copy(self.dataset.get_train_labels())
         feed_dict = {self.keep_prob_ph: self.dropout_l[-1]}
@@ -209,10 +213,24 @@ class NeuralNet(object):
         with self.sess.as_default(): # Note: This statement open a context manager of sess and not sess itself so after exiting the with need to manually close self.sess
             self.logger.info('Initialized')
             self.mini_batch_step = 0
+            start_time = time.time()
             while self.epoch < self.params['number of epochs']:
+                if self.learning_rate_update_at_epoch == self.epoch:
+                    self.logger.info(
+                        "Update learning rate to {} in epoch {}".format(self.learning_rate_updated, self.epoch))
+                    self.learning_rate = self.learning_rate_updated
 
-                step += 1
-                feed_dict[self.data_node_ph], feed_dict[self.label_node_ph] = self.get_mini_batch()
+                mnist_input_pipe.prepare_train_ds(self.sess, self.batch_size,
+                                                  np.int64(self.epoch * self.params['tf seed']))
+                while True:
+                    try:
+                        feed_dict[self.learning_rate_ph] = self.learning_rate
+                        # Notice: calculating accuracy here is incorrect because the model is training, meaning that each iteration works on different model. Evaluating model and dataset must be done when nothing changes
+                        _, l, predictions = self.sess.run([self.optimizer, self.loss, self.prediction], feed_dict=feed_dict)
+                    except tf.errors.OutOfRangeError:
+                        self.epoch += 1
+                        break
+
                 if (prev_epoch != self.epoch):
                     # self.logger.info('batch_labels: {}'.format(np.argmax(batch_labels, 1)))
                     # self.logger.info('predictions: {}'.format(np.argmax(predictions, 1)))
@@ -226,11 +244,9 @@ class NeuralNet(object):
                     prev_epoch = self.epoch
                     self.sess.run(self.isTrain_node.assign(True))
 
-                feed_dict[self.learning_rate_ph] = self.learning_rate
-                _, l, predictions = self.sess.run([self.optimizer, self.loss, self.prediction], feed_dict=feed_dict)
         # self.dataset.count_classes_for_all_datasets()
         #self.dataset.count_classes(batch_labels)
-        self.logger.info("Training stopped at epoch: %i" % self.epoch)
+        self.logger.info("Training stopped at epoch: {} after {:.0f} seconds".format(self.epoch, (time.time() - start_time)))
         # self.sess.close()
         return train_acc_l, valid_acc_l, test_acc_l
 
@@ -239,56 +255,84 @@ class NeuralNet(object):
         # assert not np.array_equal(self.initial_train_labels, self.dataset.get_train_labels())
         self.sess.run(self.isTrain_node.assign(False))
         with self.sess.as_default() as sess:
-            train_pred, train_acc = self.eval_set(sess, self.dataset.get_train_set(), self.dataset.get_train_labels())
+            # the seed here isn't like the seed is like the seed in the training part which comes right after eval_model
+            mnist_input_pipe.prepare_train_ds(self.sess, self.batch_size, np.int64(self.epoch * self.params['tf seed']))
+            train_pred, train_acc = self.eval_dataset(sess)
             self.logger.info('Train accuracy: %.3f' % train_acc)
+            # train_pred, train_acc = self.eval_set(sess, self.dataset.get_train_set(), self.dataset.get_train_labels())
+            # self.logger.info('Train accuracy: %.3f' % train_acc)
 
-            if self.dataset.validation_set_exist:
-                valid_pred, valid_acc = self.eval_set(sess, self.dataset.get_validation_set(), self.dataset.get_validation_labels())
-                self.logger.info('Validation accuracy: %.3f' % valid_acc)
-            else:
-                valid_pred, valid_acc = None, None
-                self.logger.info('Validation accuracy: Nan - no validation set, IGNORE')
+            # if mnist_input_pipe.validation_set_exist:
+            #     valid_pred, valid_acc = self.eval_set(sess, self.dataset.get_validation_set(), self.dataset.get_validation_labels())
+            #     self.logger.info('Validation accuracy: %.3f' % valid_acc)
+            # else:
+            #     valid_pred, valid_acc = None, None
+            #     self.logger.info('Validation accuracy: Nan - no validation set, IGNORE')
+            mnist_input_pipe.prepare_validation_ds(sess, self.batch_size)
+            valid_pred, valid_acc = self.eval_dataset(sess)
+            self.logger.info('Validation accuracy: %.3f' % valid_acc)
 
-            test_pred, test_acc = self.eval_set(sess, self.dataset.get_test_set(), self.dataset.get_test_labels())
+            mnist_input_pipe.prepare_test_ds(sess, self.batch_size)
+            # test_pred, test_acc = self.eval_set(sess, self.dataset.get_test_set(), self.dataset.get_test_labels())
+            test_pred, test_acc = self.eval_dataset(sess)
             self.logger.info('Test accuracy: %.3f' % test_acc)
         return train_acc, valid_acc, test_acc
 
-    def get_mini_batch(self):
-        offset = (self.mini_batch_step * self.batch_size)
-        # TODO: when reshuffle flag is False we will constantly ignore the end of the dataset. solution: take the end of the dataset, do reshuffle and take the begining of the suffled dataset
-        if (offset + self.batch_size) > self.dataset.train_labels.shape[0]:
-            offset = 0
-            self.mini_batch_step = 0
-            self.new_epoch_update()
 
-        self.mini_batch_step += 1
-        # returns data batch and batch labels
-        return self.dataset.get_train_set()[offset:(offset + self.batch_size), :],\
-               self.dataset.get_train_labels()[offset:(offset + self.batch_size), :]
+    def eval_dataset(self, sess):
+        iter_num = 0
+        avg_acc = 0.0
+        total_pred = np.zeros([self.batch_size, mnist_input_pipe.get_num_of_labels()])
+        while True:         #While epoch isn't over
+            iter_num += 1
+            try:
+                acc_val, predictions = sess.run([self.accuracy, self.prediction], feed_dict={self.keep_prob_ph: 1})
+                avg_acc += acc_val
+                total_pred += predictions
+            except tf.errors.OutOfRangeError:
+                avg_acc = avg_acc / (iter_num - 1)
+                # self.logger.info("Finish validating the full dataset at iteration {}".format(iter_num - 1))
+                # self.logger.info("Validation accuracy at epoch {} is: {}".format(self.epoch, avg_acc/(iter_num - 1))) # minus 1 since last iteration didn't happen
+                break
+        return total_pred, avg_acc
 
-    def new_epoch_update(self):
-        self.epoch += 1
-        if self.learning_rate_update_at_epoch == self.epoch:
-            self.logger.info("Update learning rate to {} in epoch {}".format(self.learning_rate_updated, self.epoch))
-            self.learning_rate = self.learning_rate_updated
-        if self.reshuffle_flag:
-            self.dataset.re_shuffle()
-        else:
-            self.logger.info("reshuffle is OFF")
 
-    # def eval_set(self sess, dataset, labels):
-    def eval_set(self, sess, data, labels):
-        # predictions = self.prediction.eval(feed_dict={self.data_node_ph: data, self.keep_prob_ph: 1})
-        # accuracy = self.calc_accuracy(predictions, labels)
-        predictions, accuracy = sess.run([self.prediction, self.accuracy], feed_dict={self.data_node_ph: data,
-                                                                                      self.label_node_ph: labels,
-                                                                                      self.keep_prob_ph: 1})
-        return predictions, accuracy
-
-    @staticmethod
-    def calc_accuracy(predictions, labels):
-        assert not np.array_equal(labels, None)
-        return 1.0 * np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1)) / predictions.shape[0]
+    # def get_mini_batch(self):
+    #     offset = (self.mini_batch_step * self.batch_size)
+    #     # TODO: when reshuffle flag is False we will constantly ignore the end of the dataset. solution: take the end of the dataset, do reshuffle and take the begining of the suffled dataset
+    #     if (offset + self.batch_size) > self.dataset.train_labels.shape[0]:
+    #         offset = 0
+    #         self.mini_batch_step = 0
+    #         self.new_epoch_update()
+    #
+    #     self.mini_batch_step += 1
+    #     # returns data batch and batch labels
+    #     return self.dataset.get_train_set()[offset:(offset + self.batch_size), :],\
+    #            self.dataset.get_train_labels()[offset:(offset + self.batch_size), :]
+    #
+    # def new_epoch_update(self):
+    #     self.epoch += 1
+    #     if self.learning_rate_update_at_epoch == self.epoch:
+    #         self.logger.info("Update learning rate to {} in epoch {}".format(self.learning_rate_updated, self.epoch))
+    #         self.learning_rate = self.learning_rate_updated
+    #     if self.reshuffle_flag:
+    #         self.dataset.re_shuffle()
+    #     else:
+    #         self.logger.info("reshuffle is OFF")
+    #
+    # # def eval_set(self sess, dataset, labels):
+    # def eval_set(self, sess, data, labels):
+    #     # predictions = self.prediction.eval(feed_dict={self.data_node_ph: data, self.keep_prob_ph: 1})
+    #     # accuracy = self.calc_accuracy(predictions, labels)
+    #     predictions, accuracy = sess.run([self.prediction, self.accuracy], feed_dict={self.data_node_ph: data,
+    #                                                                                   self.label_node_ph: labels,
+    #                                                                                   self.keep_prob_ph: 1})
+    #     return predictions, accuracy
+    #
+    # @staticmethod
+    # def calc_accuracy(predictions, labels):
+    #     assert not np.array_equal(labels, None)
+    #     return 1.0 * np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1)) / predictions.shape[0]
 
     @staticmethod
     def build_optimizer(lr_node, loss):
@@ -325,16 +369,16 @@ class NeuralNet(object):
         self.batch_size = batch_size
         # if minibatch size is bigger than train dataset size then make minibatch the same size as dataset size and
         # disable reshuffling every epoch.
-        if self.batch_size > self.dataset.train_labels.shape[0]:
-            self.batch_size = self.dataset.train_labels.shape[0]
+        if self.batch_size > mnist_input_pipe.train_labels.shape[0]:
+            self.batch_size = mnist_input_pipe.train_labels.shape[0]
             self.reshuffle_flag = False
 
     def set_placeholders(self):
         # Input data placeholders
-        self.data_node_ph = tf.placeholder(
-            tf.float32, shape=(None, self.dataset.get_dimensions()[0]), name="data_node_placeholder")
-        self.label_node_ph = tf.placeholder(tf.int32, shape=(None, self.dataset.get_num_of_labels()),
-                                              name="train_labels_placeholder")
+        # self.data_node_ph = tf.placeholder(
+        #     tf.float32, shape=(None, self.dataset.get_dimensions()[0]), name="data_node_placeholder")
+        # self.label_node_ph = tf.placeholder(tf.int32, shape=(None, self.dataset.get_num_of_labels()),
+        #                                       name="train_labels_placeholder")
         # hyper-parameters placeholders
         self.keep_prob_ph = tf.placeholder(tf.float32)
         self.learning_rate_ph = tf.placeholder(tf.float32)

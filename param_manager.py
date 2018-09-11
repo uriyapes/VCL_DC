@@ -146,6 +146,7 @@ def gen_param_files():
     model_params.update(json_path_template)
     model_params.dict['dropout keep prob list'] = [1, 1]
     model_params.dict['hidden size list'] = [300, 100]
+    model_params.dict['number of epochs'] = 91
     json_path = os.path.join("./Params", 'lenet_300_100.json')
     model_params.save(json_path)
 
