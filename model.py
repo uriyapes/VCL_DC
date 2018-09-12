@@ -26,11 +26,11 @@ class NeuralNet(object):
         self.logger = logger
         self.reshuffle_flag = True
         self.learning_rate = 0.01
-        self.learning_rate_update_at_epoch = 1
+        self.learning_rate_update_at_epoch = 0
         self.learning_rate_updated = 1e-3
         # TODO: fix
-        # self.dataset = mnist_input_pipe
-        # tf.reset_default_graph()
+        # reload(mnist_input_pipe)
+        self.dataset = dataset
         self.set_seeds(self.params['tf seed'], self.params['np seed'])
 
 
@@ -41,12 +41,13 @@ class NeuralNet(object):
     def __exit__(self, type, value, traceback):
         if self.sess is not None:
             self.sess.close()
+            tf.reset_default_graph()
 
 
 
     def build_model(self):
-        T, D = mnist_input_pipe.get_dimensions()
-        num_labels = mnist_input_pipe.get_num_of_labels()
+        T, D = self.dataset.get_dimensions()
+        num_labels = self.dataset.get_num_of_labels()
 
         self.layer_size_l = list(self.hidden_size_list)
         # Add another layer for classification
@@ -68,10 +69,10 @@ class NeuralNet(object):
         logits = self.model()
         self.prediction = tf.nn.softmax(logits)
         self.correct_prediction = tf.equal(tf.cast(tf.argmax(self.prediction, 1), tf.int32),
-                                           mnist_input_pipe.get_labels())
+                                           self.dataset.get_labels())
         self.accuracy = tf.reduce_mean(tf.cast(self.correct_prediction, "float"))
         # TODO: change to softmax_cross_entropy_with_logits_v2 when tf is updated
-        self.loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=mnist_input_pipe.get_labels(), logits=logits)
+        self.loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.dataset.get_labels(), logits=logits)
         l2_loss = tf.get_collection('l2_loss')
         l2_loss = tf.add_n(l2_loss)
         self.loss = self.loss + 0.0001 * l2_loss
@@ -99,8 +100,8 @@ class NeuralNet(object):
         # first layer parameters
         with tf.variable_scope("Layer_0"):
             # TODO: move the initializer back to the if statment in the start of the method.
-            weights_init = tf.random_normal_initializer(stddev=1 / np.sqrt(mnist_input_pipe.get_dimensions()[0]))
-            self.weights_l.append(tf.get_variable('weights', shape=[mnist_input_pipe.get_dimensions()[0], self.layer_size_l[0]],
+            weights_init = tf.random_normal_initializer(stddev=1 / np.sqrt(self.dataset.get_dimensions()[0]))
+            self.weights_l.append(tf.get_variable('weights', shape=[self.dataset.get_dimensions()[0], self.layer_size_l[0]],
                                                   dtype=tf.float32, initializer=weights_init))
             self.biases_l.append(tf.get_variable('bias', shape=[self.layer_size_l[0]], dtype=tf.float32,
                                              initializer=tf.zeros_initializer()))
@@ -123,7 +124,7 @@ class NeuralNet(object):
 
 
     def model(self):
-        assert(self.layer_size_l[-1] == mnist_input_pipe.get_num_of_labels())
+        assert(self.layer_size_l[-1] == self.dataset.get_num_of_labels())
         assert(len(self.dropout_l) == len(self.layer_size_l)-1)
         layer_l = []
         layer_index = 0
@@ -138,7 +139,7 @@ class NeuralNet(object):
             assert 0
 
         # layer_l.append(tf.nn.relu(tf.matmul(self.data_node_ph, self.weights_l[layer_index]) + self.biases_l[layer_index]))
-        layer_l.append(self.linear(mnist_input_pipe.get_data(), self.weights_l[layer_index], self.biases_l[layer_index], 'Layer_0',
+        layer_l.append(self.linear(self.dataset.get_data(), self.weights_l[layer_index], self.biases_l[layer_index], 'Layer_0',
                                    dropout_flag, self.params['batch norm'], activation, self.params['vcl']))
         layer_index += 1
 
@@ -220,7 +221,7 @@ class NeuralNet(object):
                         "Update learning rate to {} in epoch {}".format(self.learning_rate_updated, self.epoch))
                     self.learning_rate = self.learning_rate_updated
 
-                mnist_input_pipe.prepare_train_ds(self.sess, self.batch_size,
+                self.dataset.prepare_train_ds(self.sess, self.batch_size,
                                                   np.int64(self.epoch * self.params['tf seed']))
                 while True:
                     try:
@@ -256,23 +257,23 @@ class NeuralNet(object):
         self.sess.run(self.isTrain_node.assign(False))
         with self.sess.as_default() as sess:
             # the seed here isn't like the seed is like the seed in the training part which comes right after eval_model
-            mnist_input_pipe.prepare_train_ds(self.sess, self.batch_size, np.int64(self.epoch * self.params['tf seed']))
+            self.dataset.prepare_train_ds(self.sess, self.batch_size, np.int64(self.epoch * self.params['tf seed']))
             train_pred, train_acc = self.eval_dataset(sess)
             self.logger.info('Train accuracy: %.3f' % train_acc)
             # train_pred, train_acc = self.eval_set(sess, self.dataset.get_train_set(), self.dataset.get_train_labels())
             # self.logger.info('Train accuracy: %.3f' % train_acc)
 
-            # if mnist_input_pipe.validation_set_exist:
+            # if self.dataset.validation_set_exist:
             #     valid_pred, valid_acc = self.eval_set(sess, self.dataset.get_validation_set(), self.dataset.get_validation_labels())
             #     self.logger.info('Validation accuracy: %.3f' % valid_acc)
             # else:
             #     valid_pred, valid_acc = None, None
             #     self.logger.info('Validation accuracy: Nan - no validation set, IGNORE')
-            mnist_input_pipe.prepare_validation_ds(sess, self.batch_size)
+            self.dataset.prepare_validation_ds(sess, self.batch_size)
             valid_pred, valid_acc = self.eval_dataset(sess)
             self.logger.info('Validation accuracy: %.3f' % valid_acc)
 
-            mnist_input_pipe.prepare_test_ds(sess, self.batch_size)
+            self.dataset.prepare_test_ds(sess, self.batch_size)
             # test_pred, test_acc = self.eval_set(sess, self.dataset.get_test_set(), self.dataset.get_test_labels())
             test_pred, test_acc = self.eval_dataset(sess)
             self.logger.info('Test accuracy: %.3f' % test_acc)
@@ -282,7 +283,7 @@ class NeuralNet(object):
     def eval_dataset(self, sess):
         iter_num = 0
         avg_acc = 0.0
-        total_pred = np.zeros([self.batch_size, mnist_input_pipe.get_num_of_labels()])
+        total_pred = np.zeros([self.batch_size, self.dataset.get_num_of_labels()])
         while True:         #While epoch isn't over
             iter_num += 1
             try:
@@ -369,8 +370,8 @@ class NeuralNet(object):
         self.batch_size = batch_size
         # if minibatch size is bigger than train dataset size then make minibatch the same size as dataset size and
         # disable reshuffling every epoch.
-        if self.batch_size > mnist_input_pipe.train_labels.shape[0]:
-            self.batch_size = mnist_input_pipe.train_labels.shape[0]
+        if self.batch_size > self.dataset.train_labels.shape[0]:
+            self.batch_size = self.dataset.train_labels.shape[0]
             self.reshuffle_flag = False
 
     def set_placeholders(self):
@@ -440,7 +441,9 @@ if __name__ == '__main__':
     dataset_params.update(json_path)
     dataset_dict = dataset_params.dict
     # dataset_dict['fold'] = 2
-    dataset = parse_image_seg.Dataset(dataset_dict)
+    # dataset = parse_image_seg.Dataset(dataset_dict)
+    dataset = mnist_input_pipe.MnistDataset()
+    dataset.prepare_datasets()
 
     model = NeuralNet(dataset, logger, params)
     with model:

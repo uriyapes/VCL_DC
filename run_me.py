@@ -8,6 +8,7 @@ import os
 from datetime import datetime
 import argparse
 import logging #TODO: remove from here
+from mnist_input_pipe import MnistDataset
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--params_dir', default='./Params', help="directory containing .json file detailing the model and datasets params")
@@ -37,7 +38,7 @@ def write_results_to_csv_as_row(list, file_name = 'results.csv'):
 log_num = 0
 
 
-def run_model_multiple_times(dataset_dict, dataset_folds_list, num_of_model_runs, model_params, results_dir_path ='./results'):
+def run_model_multiple_times(dataset_dict, dataset_folds_list, dataset, num_of_model_runs, model_params, results_dir_path ='./results'):
     global log_num
 
     best_index_l =[]
@@ -61,8 +62,7 @@ def run_model_multiple_times(dataset_dict, dataset_folds_list, num_of_model_runs
 
             # TODO: change Dataset so we could do unshuffle and then move it outside the for loop
             # dataset = parse_image_seg.Dataset(dataset_dict)
-            # TODO: mocking the dataset since it's already embedded in model - take care later
-            dataset = None
+            dataset.prepare_datasets()
             model = get_model(dataset, logger, model_params)
             with model:
                 init_model(model)
@@ -101,6 +101,7 @@ def run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs
     write_results_to_csv_as_row(['activation', 'regularizer', 'depth', 'train accuracy', 'validation accuracy',
                                  'test accuracy'], summary_result_filename)
 
+    dataset = MnistDataset()
     for a in xrange(len(activation_list)):
         activation = activation_list[a]
         dropout_keep_prob = 0.5 if activation != 'SELU' else 0.95
@@ -113,11 +114,13 @@ def run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs
                 path_run_info = os.path.join(path_results_dir, config_name)
                 os.mkdir(path_run_info)
 
-                if activation != 'SELU':
-                    dropout_hidden_list = [0] * len(hidden_size_list)
-                    dropout_hidden_list[-1] = dropout_keep_prob
-                else:
-                    dropout_hidden_list = [dropout_keep_prob] * depth_list[d]
+                # if activation != 'SELU':
+                #     dropout_hidden_list = [0] * len(hidden_size_list)
+                #     dropout_hidden_list[-1] = dropout_keep_prob
+                # else:
+                #     dropout_hidden_list = [dropout_keep_prob] * depth_list[d]
+
+                dropout_hidden_list = [dropout_keep_prob] * depth_list[d]
 
                 params = param_manager.ModelParams()
                 params_file_name = 'lenet_300_100.json'
@@ -126,9 +129,10 @@ def run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs
                 params.dict['batch norm'] = batch_norm
                 params.dict['activation'] = activation
                 params.dict['vcl'] = use_vcl
-
+                params.dict['dropout keep prob list'] = dropout_hidden_list
+                params.dict['number of epochs'] = 91
                 best_index_l, final_train_acc_l, final_valid_acc_l, final_test_acc_l = run_model_multiple_times\
-                                                         (dataset_dict, dataset_folds_list, model_runs_per_config, params,
+                                                         (dataset_dict, dataset_folds_list, dataset, model_runs_per_config, params,
                                                           path_run_info)
 
                 file_name = os.path.join(path_run_info, "results_summary.csv")
@@ -152,9 +156,9 @@ if __name__ == '__main__':
     dataset_dict = dataset_params.dict
     dataset_dict['name'] = 'MNIST'
 
-    model_runs_per_config = 1
+    model_runs_per_config = 3
     dataset_folds_list = [0]
-    depth_list = [4]
+    depth_list = [2]
     activation_list = ['RELU', 'ELU', 'SELU']
     activation_regu_list = ['no regularizer', 'batch norm', 'vcl']
 
