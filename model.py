@@ -158,7 +158,9 @@ class NeuralNet(object):
                                        self.prune_mask_l[layer_index],  'Layer_{}'.format(layer_index), dropout_flag,
                                        self.params['batch norm'], activation, self.params['vcl']))
 
-        output = tf.matmul(layer_l[-1], self.weights_l[-1]) + self.biases_l[-1]
+        # output = tf.matmul(layer_l[-1], self.weights_l[-1]) + self.biases_l[-1]
+        output = self.linear(layer_l[-1], self.weights_l[-1], self.biases_l[-1], self.prune_mask_l[-1],  'Output_Layer',
+                             activation=None)
         return output
 
     def linear(self, input_to_layer, weights, bias, prune_mask, scope, dropout=None, bn=False, activation=tf.nn.relu, vcl=False, sample_size=10):
@@ -271,14 +273,20 @@ class NeuralNet(object):
 
     def set_prune_op(self):
         # "The pruning threshold is chosen as a quality parameter multiplied by the standard deviation of a layer's weights."
-        threshold = 0.5
+        # threshold = 0.7
+        self.threshold_ph = tf.placeholder(tf.float32)
         self.update_prune_mask_op_l = []
         self.apply_prune_weights_l = []
         self.count_nnz_weights_l = []
         self.count_nnz_mask_l = []
         for i in xrange(len(self.weights_l)):
             weights = self.weights_l[i]
-            threshold_per_layer = tf.sqrt(tf.nn.moments(tf.reshape(weights, [-1]), 0)[1]) * threshold # [-1] reshape tensor as vector. [1] means to take the variance
+            nnz_weights = tf.count_nonzero(weights, dtype=tf.float32)
+            sum_tensor = tf.multiply(tf.reduce_sum(weights, keep_dims=True), self.prune_mask_l[i]) # For every weight!=0 assign the sum
+            # STD equals to: sqrt(1/N * sum((Xi - mean)^2) where N is nnz weights and mean equals the sum of all nnz weights
+            std = tf.sqrt(tf.reduce_sum(tf.square(weights - sum_tensor / nnz_weights)) / nnz_weights)
+            threshold_per_layer = self.threshold_ph * std
+            # threshold_per_layer = tf.sqrt(tf.nn.moments(tf.reshape(weights, [-1]), 0)[1]) * self.threshold_ph # [-1] reshape tensor as vector. [1] means to take the variance
             # threshold_per_layer = tf.sqrt(2*tf.nn.l2_loss(weights)- tf.square(tf.reduce_mean(weights))) * threshold
             index_to_keep = tf.multiply(tf.to_float(tf.greater_equal(tf.abs(weights), tf.ones_like(weights) * threshold_per_layer)),
                 self.prune_mask_l[i])  # Multiply by prune_mask_l[i] so pruning indexes will by apply on previous mask
@@ -410,25 +418,30 @@ class NeuralNet(object):
         tf.set_random_seed(tf_seed)
         np.random.seed(np_seed)
 
-    def prune(self):
-        with self.sess.as_default() as sess:
+    def prune(self, prune_th):
+        # TODO: see if removing as sess save memory
+        with self.sess.as_default():
 
-            self.logger.info("NNZ weights before pruning {}".format(sess.run((self.count_nnz_weights_l))))
-            self.logger.info("NNZ mask values before pruning {}".format(sess.run((self.count_nnz_mask_l))))
+            self.logger.info("NNZ weights before pruning {}".format(self.sess.run((self.count_nnz_weights_l))))
+            self.logger.info("NNZ mask values before pruning {}".format(self.sess.run((self.count_nnz_mask_l))))
             logger.debug("memory usage 1: {}".format(my_utilities.memory()))
-            sess.run(self.update_prune_masks)
+            # This op seems to take memory
+            self.sess.run(self.update_prune_masks, feed_dict={self.threshold_ph: prune_th})
+            # self.sess.run(self.update_prune_masks)
             logger.debug("memory usage 2: {}".format(my_utilities.memory()))
-            sess.run(self.apply_prune_weights)
+            self.sess.run(self.apply_prune_weights)
             logger.debug("memory usage 3: {}".format(my_utilities.memory()))
-            self.logger.info("NNZ weights after pruning {}".format(sess.run((self.count_nnz_weights_l))))
-            sess.run(self.init_optimizer_op)
+            self.logger.info("NNZ weights after pruning {}".format(self.sess.run((self.count_nnz_weights_l))))
+            self.logger.info("NNZ mask values after pruning {}".format(self.sess.run((self.count_nnz_mask_l))))
+            self.sess.run(tf.variables_initializer(self.optimizer_class.variables()))
             logger.debug("memory usage 4: {}".format(my_utilities.memory()))
+            # This op seems to take memory
             train_acc_l, valid_acc_l, test_acc_l = self._train()
             logger.debug("memory usage 5: {}".format(my_utilities.memory()))
-            self.logger.info("NNZ weights after retraining {}".format(sess.run((self.count_nnz_weights_l))))
-            self.logger.info("NNZ mask values after retraining  {}".format(sess.run((self.count_nnz_mask_l))))
+            self.logger.info("NNZ weights after retraining {}".format(self.sess.run((self.count_nnz_weights_l))))
+            self.logger.info("NNZ mask values after retraining  {}".format(self.sess.run((self.count_nnz_mask_l))))
             logger.debug("memory usage 6: {}".format(my_utilities.memory()))
-            return train_acc_l, valid_acc_l, test_acc_l
+        return train_acc_l, valid_acc_l, test_acc_l
 
 
 
@@ -474,9 +487,12 @@ if __name__ == '__main__':
         model.build_model()
         train_acc_l, valid_acc_l, test_acc_l = model.train_model()
         # train_acc, valid_acc, test_acc = model.eval_model()
-        for i in xrange(20):
+        model.params['number of epochs'] = 30
+        prune_itr = 10
+        prune_th_l = [0.7] * (prune_itr/2) + [0.7] * (1 - prune_itr/2)
+        for i in xrange(prune_itr):
             logger.debug("memory usage before {} prune iter: {}".format(i, my_utilities.memory()))
-            train_acc_l, valid_acc_l, test_acc_l = model.prune()
+            train_acc_l, valid_acc_l, test_acc_l = model.prune(prune_th_l[i])
             logger.debug("memory usage after {} prune iter: {}".format(i, my_utilities.memory()))
             index, train_acc_at_ind, valid_acc_ma_at_ind, test_acc_at_ind = model.find_best_accuracy(train_acc_l, valid_acc_l, test_acc_l)
             model.save_variables("./results/model_after_{}_prunes".format(i+1))
