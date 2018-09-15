@@ -488,8 +488,8 @@ if __name__ == '__main__':
         train_acc_l, valid_acc_l, test_acc_l = model.train_model()
         # train_acc, valid_acc, test_acc = model.eval_model()
         model.params['number of epochs'] = 30
-        prune_itr = 10
-        prune_th_l = [0.7] * (prune_itr/2) + [0.7] * (1 - prune_itr/2)
+        prune_itr = 20
+        prune_th_l = [0.7] * (prune_itr/2) + [0.7] * (prune_itr - prune_itr/2)
         for i in xrange(prune_itr):
             logger.debug("memory usage before {} prune iter: {}".format(i, my_utilities.memory()))
             train_acc_l, valid_acc_l, test_acc_l = model.prune(prune_th_l[i])
