@@ -82,6 +82,8 @@ class NeuralNet(object):
             self.loss = self.loss + self.params['gamma'] * l2_norm
         # Optimizer.
         self.optimizer = self.build_optimizer(self.learning_rate_ph, self.loss)
+        self.tf_saver = tf.train.Saver()
+        self.set_prune_op()
 
     def set_architecture_variables(self, weights_init_type="He"):
         if weights_init_type == "He":
@@ -96,7 +98,8 @@ class NeuralNet(object):
             assert 0
         self.weights_l = []
         self.biases_l = []
-
+        self.prune_mask_l = []
+        tf.GraphKeys.PRUNING_MASKS = "pruning_masks"  # Add this to prevent pruning variables from being stored with the model
         # first layer parameters
         with tf.variable_scope("Layer_0"):
             # TODO: move the initializer back to the if statment in the start of the method.
@@ -106,6 +109,8 @@ class NeuralNet(object):
             self.biases_l.append(tf.get_variable('bias', shape=[self.layer_size_l[0]], dtype=tf.float32,
                                              initializer=tf.zeros_initializer()))
             tf.add_to_collection('l2_loss', (tf.nn.l2_loss(self.weights_l[0])))
+            self.prune_mask_l.append(tf.Variable(tf.ones_like(self.weights_l[0]), trainable=False,
+                                                 collections=[tf.GraphKeys.PRUNING_MASKS]))
 
         weights_init = tf.random_normal_initializer(stddev=1 / np.sqrt(self.layer_size_l[0]))
         for i in range(1, len(self.layer_size_l)):
@@ -115,6 +120,8 @@ class NeuralNet(object):
                 self.biases_l.append(tf.get_variable('bias', shape=[self.layer_size_l[i]], dtype=tf.float32,
                                                 initializer=tf.zeros_initializer()))
                 tf.add_to_collection('l2_loss', (tf.nn.l2_loss(self.weights_l[i])))
+                self.prune_mask_l.append(tf.Variable(tf.ones_like(self.weights_l[i]), trainable=False,
+                                                     collections=[tf.GraphKeys.PRUNING_MASKS]))
         # I want to have the weights explictly so don't use dense
         # input = tf.layers.dense(self.tf_train_minibatch, self.layer_size, kernel_initializer=he_init,
         #                         activation=self._activation, name='layer{}'.format(i + 1))
@@ -139,26 +146,28 @@ class NeuralNet(object):
             assert 0
 
         # layer_l.append(tf.nn.relu(tf.matmul(self.data_node_ph, self.weights_l[layer_index]) + self.biases_l[layer_index]))
-        layer_l.append(self.linear(self.dataset.get_data(), self.weights_l[layer_index], self.biases_l[layer_index], 'Layer_0',
-                                   dropout_flag, self.params['batch norm'], activation, self.params['vcl']))
+        layer_l.append(self.linear(self.dataset.get_data(), self.weights_l[layer_index], self.biases_l[layer_index],
+                                   self.prune_mask_l[layer_index], 'Layer_0', dropout_flag, self.params['batch norm'],
+                                   activation, self.params['vcl']))
         layer_index += 1
 
         for layer_index in range(1, len(self.layer_size_l) - 1):
             # layer_l.append(tf.nn.relu(tf.matmul(layer_l[op_layer_index - 1], self.weights_l[layer_index]) + self.biases_l[layer_index]))
             dropout_flag = self.dropout_l[layer_index] != 0
-            layer_l.append(self.linear(layer_l[layer_index - 1], self.weights_l[layer_index], self.biases_l[layer_index]
-                                       , 'Layer_{}'.format(layer_index), dropout_flag, self.params['batch norm'],
-                                          activation, self.params['vcl']))
+            layer_l.append(self.linear(layer_l[layer_index - 1], self.weights_l[layer_index], self.biases_l[layer_index],
+                                       self.prune_mask_l[layer_index],  'Layer_{}'.format(layer_index), dropout_flag,
+                                       self.params['batch norm'], activation, self.params['vcl']))
 
         output = tf.matmul(layer_l[-1], self.weights_l[-1]) + self.biases_l[-1]
         return output
 
-    def linear(self, input_to_layer, weights, bias, scope, dropout=None, bn=False, activation=tf.nn.relu, vcl=False, sample_size=10):
+    def linear(self, input_to_layer, weights, bias, prune_mask, scope, dropout=None, bn=False, activation=tf.nn.relu, vcl=False, sample_size=10):
 
         if vcl != 0 and bn != False:
             self.logger.warning('BOTH VCL AND BN ARE ACTIVE')
         with tf.variable_scope(scope):
-            output = tf.matmul(input_to_layer, weights) + bias
+            pruned_weights = tf.multiply(weights, prune_mask)
+            output = tf.matmul(input_to_layer, pruned_weights) + bias
             if bn:
                 output = self.batchnorm(output, scope=scope)
             if vcl:
@@ -196,22 +205,30 @@ class NeuralNet(object):
 
 
     def train_model(self, ckpt_path = None):
+        self.sess = tf.Session()
+        self._init_sess(ckpt_path)
+        return self._train()
+
+
+    def _init_sess(self, ckpt_path=None):
+        if ckpt_path is None:
+            self.sess.run(tf.global_variables_initializer())
+            self.sess.run(tf.initialize_variables(tf.get_collection(tf.GraphKeys.PRUNING_MASKS)))
+        else:
+            self.load_variables(ckpt_path)
+
+    def _train(self):
         train_acc_l = []
         valid_acc_l = []
         test_acc_l = []
-        self.tf_saver = tf.train.Saver()
+
         self.epoch = 0
         prev_epoch = 0
         # TODO: check shuffling is working
         # self.initial_train_labels = np.copy(self.dataset.get_train_labels())
         feed_dict = {self.keep_prob_ph: self.dropout_l[-1]}
 
-        self.sess = tf.Session()
-        if ckpt_path is None:
-            self.sess.run(tf.global_variables_initializer())
-        else:
-            self.load_variables(ckpt_path)
-        with self.sess.as_default(): # Note: This statement open a context manager of sess and not sess itself so after exiting the with need to manually close self.sess
+        with self.sess.as_default():  # Note: This statement open a context manager of sess and not sess itself so after exiting the with need to manually close self.sess
             self.logger.info('Initialized')
             self.mini_batch_step = 0
             start_time = time.time()
@@ -222,12 +239,13 @@ class NeuralNet(object):
                     self.learning_rate = self.learning_rate_updated
 
                 self.dataset.prepare_train_ds(self.sess, self.batch_size,
-                                                  np.int64(self.epoch * self.params['tf seed']))
+                                              np.int64(self.epoch * self.params['tf seed']))
                 while True:
                     try:
                         feed_dict[self.learning_rate_ph] = self.learning_rate
                         # Notice: calculating accuracy here is incorrect because the model is training, meaning that each iteration works on different model. Evaluating model and dataset must be done when nothing changes
-                        _, l, predictions = self.sess.run([self.optimizer, self.loss, self.prediction], feed_dict=feed_dict)
+                        _, l, predictions = self.sess.run([self.optimizer, self.loss, self.prediction],
+                                                          feed_dict=feed_dict)
                     except tf.errors.OutOfRangeError:
                         self.epoch += 1
                         break
@@ -246,10 +264,33 @@ class NeuralNet(object):
                     self.sess.run(self.isTrain_node.assign(True))
 
         # self.dataset.count_classes_for_all_datasets()
-        #self.dataset.count_classes(batch_labels)
-        self.logger.info("Training stopped at epoch: {} after {:.0f} seconds".format(self.epoch, (time.time() - start_time)))
-        # self.sess.close()
+        # self.dataset.count_classes(batch_labels)
+        self.logger.info(
+            "Training stopped at epoch: {} after {:.0f} seconds".format(self.epoch, (time.time() - start_time)))
         return train_acc_l, valid_acc_l, test_acc_l
+
+    def set_prune_op(self):
+        # "The pruning threshold is chosen as a quality parameter multiplied by the standard deviation of a layer's weights."
+        threshold = 0.1
+        self.update_prune_mask_op_l = []
+        self.apply_prune_weights_l = []
+        self.count_nnz_weights_l = []
+        self.count_nnz_mask_l = []
+        for i in xrange(len(self.weights_l)):
+            weights = self.weights_l[i]
+            threshold_per_layer = tf.sqrt(tf.nn.moments(tf.reshape(weights, [-1]), 0)[1]) * threshold # [-1] reshape tensor as vector. [1] means to take the variance
+            # threshold_per_layer = tf.sqrt(2*tf.nn.l2_loss(weights)- tf.square(tf.reduce_mean(weights))) * threshold
+            index_to_keep = tf.multiply(tf.to_float(tf.greater_equal(tf.abs(weights), tf.ones_like(weights) * threshold_per_layer)),
+                self.prune_mask_l[i])  # Multiply by prune_mask_l[i] so pruning indexes will by apply on previous mask
+
+            self.update_prune_mask_op_l.append(tf.assign(self.prune_mask_l[i], index_to_keep))
+            self.apply_prune_weights_l.append(weights.assign(tf.multiply(weights, self.prune_mask_l[i]))) #Set weights to be the prune weights
+            self.count_nnz_weights_l.append(tf.count_nonzero(weights))
+            self.count_nnz_mask_l.append(tf.count_nonzero(self.prune_mask_l[i]))
+
+        self.update_prune_masks = tf.group(self.update_prune_mask_op_l)
+        self.apply_prune_weights = tf.group(self.apply_prune_weights_l)
+        # self.count_nnz_weights = tf.group(self.count_nnz_weights_l)
 
 
     def eval_model(self):
@@ -297,54 +338,16 @@ class NeuralNet(object):
                 break
         return total_pred, avg_acc
 
-
-    # def get_mini_batch(self):
-    #     offset = (self.mini_batch_step * self.batch_size)
-    #     # TODO: when reshuffle flag is False we will constantly ignore the end of the dataset. solution: take the end of the dataset, do reshuffle and take the begining of the suffled dataset
-    #     if (offset + self.batch_size) > self.dataset.train_labels.shape[0]:
-    #         offset = 0
-    #         self.mini_batch_step = 0
-    #         self.new_epoch_update()
-    #
-    #     self.mini_batch_step += 1
-    #     # returns data batch and batch labels
-    #     return self.dataset.get_train_set()[offset:(offset + self.batch_size), :],\
-    #            self.dataset.get_train_labels()[offset:(offset + self.batch_size), :]
-    #
-    # def new_epoch_update(self):
-    #     self.epoch += 1
-    #     if self.learning_rate_update_at_epoch == self.epoch:
-    #         self.logger.info("Update learning rate to {} in epoch {}".format(self.learning_rate_updated, self.epoch))
-    #         self.learning_rate = self.learning_rate_updated
-    #     if self.reshuffle_flag:
-    #         self.dataset.re_shuffle()
-    #     else:
-    #         self.logger.info("reshuffle is OFF")
-    #
-    # # def eval_set(self sess, dataset, labels):
-    # def eval_set(self, sess, data, labels):
-    #     # predictions = self.prediction.eval(feed_dict={self.data_node_ph: data, self.keep_prob_ph: 1})
-    #     # accuracy = self.calc_accuracy(predictions, labels)
-    #     predictions, accuracy = sess.run([self.prediction, self.accuracy], feed_dict={self.data_node_ph: data,
-    #                                                                                   self.label_node_ph: labels,
-    #                                                                                   self.keep_prob_ph: 1})
-    #     return predictions, accuracy
-    #
-    # @staticmethod
-    # def calc_accuracy(predictions, labels):
-    #     assert not np.array_equal(labels, None)
-    #     return 1.0 * np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1)) / predictions.shape[0]
-
-    @staticmethod
-    def build_optimizer(lr_node, loss):
+    def build_optimizer(self, lr_node, loss):
         # return tf.train.AdamOptimizer(lr_node).minimize(self.loss)
         # return tf.train.GradientDescentOptimizer(lr_node).minimize(self.loss)
         t_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-        optimizer = tf.train.MomentumOptimizer(lr_node, 0.9)
-        grads_and_vars = optimizer.compute_gradients(loss, var_list=t_vars)
+        self.optimizer_class = tf.train.MomentumOptimizer(lr_node, 0.9)
+        # optimizer = tf.train.GradientDescentOptimizer(lr_node)
+        grads_and_vars = self.optimizer_class.compute_gradients(loss, var_list=t_vars)
         clip_constant = 1
         grads_and_vars_rescaled = [(tf.clip_by_norm(gv[0], clip_constant), gv[1]) for gv in grads_and_vars]
-        train_op_net = optimizer.apply_gradients(grads_and_vars_rescaled)
+        train_op_net = self.optimizer_class.apply_gradients(grads_and_vars_rescaled)
         return train_op_net
 
     def find_best_accuracy(self, train_acc_l, valid_acc_l, test_acc_l):
@@ -406,6 +409,26 @@ class NeuralNet(object):
         tf.set_random_seed(tf_seed)
         np.random.seed(np_seed)
 
+    def prune(self):
+        with self.sess.as_default() as sess:
+
+            self.logger.info("NNZ weights before pruning {}".format(sess.run((self.count_nnz_weights_l))))
+            self.logger.info("NNZ mask values before pruning {}".format(sess.run((self.count_nnz_mask_l))))
+            logger.debug("memory usage 1: {}".format(my_utilities.memory()))
+            sess.run(self.update_prune_masks)
+            logger.debug("memory usage 2: {}".format(my_utilities.memory()))
+            sess.run(self.apply_prune_weights)
+            logger.debug("memory usage 3: {}".format(my_utilities.memory()))
+            self.logger.info("NNZ weights after pruning {}".format(sess.run((self.count_nnz_weights_l))))
+            sess.run(tf.variables_initializer(self.optimizer_class.variables()))
+            logger.debug("memory usage 4: {}".format(my_utilities.memory()))
+            train_acc_l, valid_acc_l, test_acc_l = self._train()
+            logger.debug("memory usage 5: {}".format(my_utilities.memory()))
+            self.logger.info("NNZ weights after retraining {}".format(sess.run((self.count_nnz_weights_l))))
+            self.logger.info("NNZ mask values after retraining  {}".format(sess.run((self.count_nnz_mask_l))))
+            logger.debug("memory usage 6: {}".format(my_utilities.memory()))
+            return train_acc_l, valid_acc_l, test_acc_l
+
 
 
 
@@ -425,7 +448,7 @@ if __name__ == '__main__':
     model_params.update(json_path)
     params = model_params.dict
     # params = param_manager.ModelParams.create_model_params(batch_norm=1)
-    # params['number of epochs'] = 5
+    params['number of epochs'] = 1
     # params['check point flag'] = 1
     # params['check point name'] = './results/unitest2'
     # params['batch norm'] = 0
@@ -450,7 +473,11 @@ if __name__ == '__main__':
         model.build_model()
         train_acc_l, valid_acc_l, test_acc_l = model.train_model()
         # train_acc, valid_acc, test_acc = model.eval_model()
-        index, train_acc_at_ind, valid_acc_ma_at_ind, test_acc_at_ind = model.find_best_accuracy(train_acc_l, valid_acc_l, test_acc_l)
+        for i in xrange(20):
+            logger.debug("memory usage before {} prune iter: {}".format(i, my_utilities.memory()))
+            train_acc_l, valid_acc_l, test_acc_l = model.prune()
+            logger.debug("memory usage after {} prune iter: {}".format(i, my_utilities.memory()))
+            index, train_acc_at_ind, valid_acc_ma_at_ind, test_acc_at_ind = model.find_best_accuracy(train_acc_l, valid_acc_l, test_acc_l)
 
         if model.params['check point flag']:
             model.save_variables(model.params['check point name'])
