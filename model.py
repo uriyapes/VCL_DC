@@ -213,7 +213,7 @@ class NeuralNet(object):
     def _init_sess(self, ckpt_path=None):
         if ckpt_path is None:
             self.sess.run(tf.global_variables_initializer())
-            self.sess.run(tf.initialize_variables(tf.get_collection(tf.GraphKeys.PRUNING_MASKS)))
+            self.sess.run(tf.variables_initializer(tf.get_collection(tf.GraphKeys.PRUNING_MASKS)))
         else:
             self.load_variables(ckpt_path)
 
@@ -271,7 +271,7 @@ class NeuralNet(object):
 
     def set_prune_op(self):
         # "The pruning threshold is chosen as a quality parameter multiplied by the standard deviation of a layer's weights."
-        threshold = 0.1
+        threshold = 0.5
         self.update_prune_mask_op_l = []
         self.apply_prune_weights_l = []
         self.count_nnz_weights_l = []
@@ -343,6 +343,7 @@ class NeuralNet(object):
         # return tf.train.GradientDescentOptimizer(lr_node).minimize(self.loss)
         t_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
         self.optimizer_class = tf.train.MomentumOptimizer(lr_node, 0.9)
+        self.init_optimizer_op = tf.variables_initializer(self.optimizer_class.variables())
         # optimizer = tf.train.GradientDescentOptimizer(lr_node)
         grads_and_vars = self.optimizer_class.compute_gradients(loss, var_list=t_vars)
         clip_constant = 1
@@ -420,7 +421,7 @@ class NeuralNet(object):
             sess.run(self.apply_prune_weights)
             logger.debug("memory usage 3: {}".format(my_utilities.memory()))
             self.logger.info("NNZ weights after pruning {}".format(sess.run((self.count_nnz_weights_l))))
-            sess.run(tf.variables_initializer(self.optimizer_class.variables()))
+            sess.run(self.init_optimizer_op)
             logger.debug("memory usage 4: {}".format(my_utilities.memory()))
             train_acc_l, valid_acc_l, test_acc_l = self._train()
             logger.debug("memory usage 5: {}".format(my_utilities.memory()))
@@ -478,6 +479,7 @@ if __name__ == '__main__':
             train_acc_l, valid_acc_l, test_acc_l = model.prune()
             logger.debug("memory usage after {} prune iter: {}".format(i, my_utilities.memory()))
             index, train_acc_at_ind, valid_acc_ma_at_ind, test_acc_at_ind = model.find_best_accuracy(train_acc_l, valid_acc_l, test_acc_l)
+            model.save_variables("./results/model_after_{}_prunes".format(i+1))
 
         if model.params['check point flag']:
             model.save_variables(model.params['check point name'])
