@@ -1,7 +1,7 @@
 import os
 import logging
 from datetime import datetime
-
+import psutil
 
 def set_a_logger(log_name='log', dirpath="./", filename=None, console_level=logging.DEBUG, file_level=logging.DEBUG):
     """
@@ -58,6 +58,12 @@ def set_a_logger(log_name='log', dirpath="./", filename=None, console_level=logg
     logger.critical('Logging level inside file is: {}'.format(logging._levelNames[file_level]))
     return logger
 
+def memory():
+    pid = os.getpid()
+    py = psutil.Process(pid)
+    memoryUse = py.memory_info()[0]/2.**30  # memory use in GB...I think
+    # print('memory use:', memoryUse)
+    return memoryUse
 
 if __name__ == '__main__':
     # Test the logger wrap function - write inside log.log

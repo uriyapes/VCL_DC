@@ -1,0 +1,20 @@
+{
+    "batch norm": false, 
+    "activation": "RELU", 
+    "check point flag": 0, 
+    "hidden size list": [
+        300, 
+        100
+    ], 
+    "number of epochs": 70,
+    "np seed": 1469658903, 
+    "vcl": false, 
+    "tf seed": 1292193294, 
+    "dropout keep prob list": [
+        0.5,
+        0.5
+    ], 
+    "random seeds": 1, 
+    "check point name": null, 
+    "gamma": 0.01
+}
