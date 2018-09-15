@@ -438,10 +438,11 @@ class NeuralNet(object):
             # This op seems to take memory
             train_acc_l, valid_acc_l, test_acc_l = self._train()
             logger.debug("memory usage 5: {}".format(my_utilities.memory()))
-            self.logger.info("NNZ weights after retraining {}".format(self.sess.run((self.count_nnz_weights_l))))
+            nnz_weights = self.sess.run(self.count_nnz_weights_l)
+            self.logger.info("NNZ weights after retraining {}".format(nnz_weights))
             self.logger.info("NNZ mask values after retraining  {}".format(self.sess.run((self.count_nnz_mask_l))))
             logger.debug("memory usage 6: {}".format(my_utilities.memory()))
-        return train_acc_l, valid_acc_l, test_acc_l
+        return train_acc_l, valid_acc_l, test_acc_l, nnz_weights
 
 
 
@@ -467,6 +468,7 @@ if __name__ == '__main__':
     # params['check point name'] = './results/unitest2'
     # params['batch norm'] = 0
     # params['activation'] = 'ELU'
+    params['vcl'] = 'True'
 
 
     json_path = os.path.join(args.params_dir, 'image_segmentation_params.json')
@@ -486,16 +488,24 @@ if __name__ == '__main__':
     with model:
         model.build_model()
         train_acc_l, valid_acc_l, test_acc_l = model.train_model()
+        model.find_best_accuracy(train_acc_l, valid_acc_l, test_acc_l)
         # train_acc, valid_acc, test_acc = model.eval_model()
         model.params['number of epochs'] = 25
         prune_itr = 12
         prune_th_l = [0.85] * (prune_itr/2) + [0.9]*(prune_itr - prune_itr/2)
+        test_acc_l = []
+        nnz_weights_l = []
         for i in xrange(prune_itr):
             logger.debug("memory usage before {} prune iter: {}".format(i, my_utilities.memory()))
-            train_acc_l, valid_acc_l, test_acc_l = model.prune(prune_th_l[i])
+            train_acc_l, valid_acc_l, test_acc_l, nnz_weights = model.prune(prune_th_l[i])
+            nnz_weights_l.append(sum(nnz_weights))
             logger.debug("memory usage after {} prune iter: {}".format(i, my_utilities.memory()))
             index, train_acc_at_ind, valid_acc_ma_at_ind, test_acc_at_ind = model.find_best_accuracy(train_acc_l, valid_acc_l, test_acc_l)
             model.save_variables("./results/model_after_{}_prunes".format(i+1))
+            test_acc_l.append(test_acc_at_ind)
+
+        logger.info("nnz_weights_l: {}".format(nnz_weights_l))
+        logger.info("test_acc_l: {}".format(test_acc_l))
 
         if model.params['check point flag']:
             model.save_variables(model.params['check point name'])
