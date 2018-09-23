@@ -7,6 +7,7 @@ import numpy as np
 import os
 from datetime import datetime
 import argparse
+import logging #TODO: remove from here
 from mnist_input_pipe import MnistDataset
 
 parser = argparse.ArgumentParser()
@@ -98,7 +99,7 @@ def run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs
     path_results_dir = os.path.join(path_results_per_dataset, timestamp)
     os.mkdir(path_results_dir)
     summary_result_filename = os.path.join(path_results_dir, "avg_results_over_{}_runs_over_{}_folds.csv".format(model_runs_per_config, len(dataset_folds_list)))
-    write_results_to_csv_as_row(['activation', 'regularizer', 'depth', 'train accuracy', 'validation accuracy',
+    write_results_to_csv_as_row(['activation', 'regularizer', 'depth', 'vcl_size', 'l2_coeff', 'train accuracy', 'validation accuracy',
                                  'test accuracy'], summary_result_filename)
 
     dataset = MnistDataset()
@@ -111,7 +112,8 @@ def run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs
                     batch_norm, use_vcl = choose_activation_regularizer(activation_regu_list[r])
                     for d in xrange(len(depth_list)):
                         hidden_size_list = depth_list[d] * [256]
-                        config_name = "activation_{}_regularizer_{}_depth_{}".format(activation, activation_regu_list[r], depth_list[d])
+                        config_name = "activation_{}_regularizer_{}_depth_{}_vclSize_{}_l2Coeff_{}".format(
+                            activation, activation_regu_list[r], depth_list[d], vcl_sample_size, l2_coeff)
                         # This path is used to save the log information, parameter file and graph variables
                         path_run_info = os.path.join(path_results_dir, config_name)
                         os.mkdir(path_run_info)
@@ -144,7 +146,7 @@ def run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs
                         write_results_to_csv_as_row(['validation accuracy'] + final_valid_acc_l, file_name)
                         write_results_to_csv_as_row(['test accuracy'] + final_test_acc_l, file_name)
 
-                        result_summary_config = [activation, activation_regu_list[r], depth_list[d]]
+                        result_summary_config = [activation, activation_regu_list[r], depth_list[d], vcl_sample_size, l2_coeff]
                         result_summary = [np.mean(final_train_acc_l), np.mean(final_valid_acc_l), np.mean(final_test_acc_l)]
                         result_summary = result_summary_config + ['{:.3f}'.format(x) for x in result_summary]
 
