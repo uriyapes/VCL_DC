@@ -493,7 +493,7 @@ if __name__ == '__main__':
         model.params['number of epochs'] = 25
         prune_itr = 12
         prune_th_l = [0.85] * (prune_itr/2) + [0.9]*(prune_itr - prune_itr/2)
-        test_acc_l = []
+        test_acc_l_at_ind = []
         nnz_weights_l = []
         for i in xrange(prune_itr):
             logger.debug("memory usage before {} prune iter: {}".format(i, my_utilities.memory()))
@@ -502,10 +502,10 @@ if __name__ == '__main__':
             logger.debug("memory usage after {} prune iter: {}".format(i, my_utilities.memory()))
             index, train_acc_at_ind, valid_acc_ma_at_ind, test_acc_at_ind = model.find_best_accuracy(train_acc_l, valid_acc_l, test_acc_l)
             model.save_variables("./results/model_after_{}_prunes".format(i+1))
-            test_acc_l.append(test_acc_at_ind)
+            test_acc_l_at_ind.append(test_acc_at_ind)
 
         logger.info("nnz_weights_l: {}".format(nnz_weights_l))
-        logger.info("test_acc_l: {}".format(test_acc_l))
+        logger.info("test_acc_l: {}".format(test_acc_l_at_ind))
 
         if model.params['check point flag']:
             model.save_variables(model.params['check point name'])
