@@ -6,15 +6,17 @@
         300, 
         100
     ], 
-    "number of epochs": 70,
-    "np seed": 1469658903, 
+    "number of epochs": 91, 
+    "np seed": 693539867, 
     "vcl": false, 
-    "tf seed": 1292193294, 
+    "tf seed": 415383650, 
     "dropout keep prob list": [
-        0.5,
-        0.5
+        1, 
+        1
     ], 
     "random seeds": 1, 
+    "l2 coeff": 0.0001, 
     "check point name": null, 
+    "vcl sample size": 10, 
     "gamma": 0.01
 }

@@ -75,7 +75,7 @@ class NeuralNet(object):
         self.loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.dataset.get_labels(), logits=logits)
         l2_loss = tf.get_collection('l2_loss')
         l2_loss = tf.add_n(l2_loss)
-        self.loss = self.loss + 0.0001 * l2_loss
+        self.loss = self.loss + self.params['l2 coeff'] * l2_loss
         if self.params['vcl']:
             l2_norm = tf.get_collection('l2_norm')
             l2_norm = tf.add_n(l2_norm)
@@ -163,7 +163,7 @@ class NeuralNet(object):
                              activation=None)
         return output
 
-    def linear(self, input_to_layer, weights, bias, prune_mask, scope, dropout=None, bn=False, activation=tf.nn.relu, vcl=False, sample_size=10):
+    def linear(self, input_to_layer, weights, bias, prune_mask, scope, dropout=None, bn=False, activation=tf.nn.relu, vcl=False):
 
         if vcl != 0 and bn != False:
             self.logger.warning('BOTH VCL AND BN ARE ACTIVE')
@@ -173,7 +173,7 @@ class NeuralNet(object):
             if bn:
                 output = self.batchnorm(output, scope=scope)
             if vcl:
-                self.add_vcl_loss(output, sample_size)
+                self.add_vcl_loss(output, self.params['vcl sample size'])
             if activation:
                 output = activation(output)
             if dropout:

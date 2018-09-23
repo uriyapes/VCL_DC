@@ -7,7 +7,6 @@ import numpy as np
 import os
 from datetime import datetime
 import argparse
-import logging #TODO: remove from here
 from mnist_input_pipe import MnistDataset
 
 parser = argparse.ArgumentParser()
@@ -90,7 +89,8 @@ def choose_activation_regularizer(activation_regularizer):
     return batch_norm, use_vcl
 
 
-def run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs_per_config, depth_list, activation_list, activation_regu_list):
+def run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs_per_config, depth_list, activation_list,
+                                    activation_regu_list, l2_loss_coeff_list, vcl_sample_size_list):
     timestamp = str(datetime.now().strftime('%Y_%m_%d__%H-%M-%S'))
     path_results_per_dataset = r"./results/" + dataset_dict['dataset_name']
     if not os.path.isdir(path_results_per_dataset):
@@ -102,49 +102,53 @@ def run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs
                                  'test accuracy'], summary_result_filename)
 
     dataset = MnistDataset()
-    for a in xrange(len(activation_list)):
-        activation = activation_list[a]
-        dropout_keep_prob = 0.5 if activation != 'SELU' else 0.95
-        for r in xrange(len(activation_regu_list)):
-            batch_norm, use_vcl = choose_activation_regularizer(activation_regu_list[r])
-            for d in xrange(len(depth_list)):
-                hidden_size_list = depth_list[d] * [256]
-                config_name = "activation_{}_regularizer_{}_depth_{}".format(activation, activation_regu_list[r], depth_list[d])
-                # This path is used to save the log information, parameter file and graph variables
-                path_run_info = os.path.join(path_results_dir, config_name)
-                os.mkdir(path_run_info)
+    for vcl_sample_size in vcl_sample_size_list:
+        for l2_coeff in l2_loss_coeff_list:
+            for a in xrange(len(activation_list)):
+                activation = activation_list[a]
+                dropout_keep_prob = 0.5 if activation != 'SELU' else 0.95
+                for r in xrange(len(activation_regu_list)):
+                    batch_norm, use_vcl = choose_activation_regularizer(activation_regu_list[r])
+                    for d in xrange(len(depth_list)):
+                        hidden_size_list = depth_list[d] * [256]
+                        config_name = "activation_{}_regularizer_{}_depth_{}".format(activation, activation_regu_list[r], depth_list[d])
+                        # This path is used to save the log information, parameter file and graph variables
+                        path_run_info = os.path.join(path_results_dir, config_name)
+                        os.mkdir(path_run_info)
 
-                # if activation != 'SELU':
-                #     dropout_hidden_list = [0] * len(hidden_size_list)
-                #     dropout_hidden_list[-1] = dropout_keep_prob
-                # else:
-                #     dropout_hidden_list = [dropout_keep_prob] * depth_list[d]
+                        # if activation != 'SELU':
+                        #     dropout_hidden_list = [0] * len(hidden_size_list)
+                        #     dropout_hidden_list[-1] = dropout_keep_prob
+                        # else:
+                        #     dropout_hidden_list = [dropout_keep_prob] * depth_list[d]
 
-                dropout_hidden_list = [dropout_keep_prob] * depth_list[d]
+                        dropout_hidden_list = [dropout_keep_prob] * depth_list[d]
 
-                params = param_manager.ModelParams()
-                params_file_name = 'lenet_300_100.json'
-                params_file_path = os.path.join('./Params', params_file_name)
-                params.update(params_file_path)
-                params.dict['batch norm'] = batch_norm
-                params.dict['activation'] = activation
-                params.dict['vcl'] = use_vcl
-                params.dict['dropout keep prob list'] = dropout_hidden_list
-                params.dict['number of epochs'] = 91
-                best_index_l, final_train_acc_l, final_valid_acc_l, final_test_acc_l = run_model_multiple_times\
-                                                         (dataset_dict, dataset_folds_list, dataset, model_runs_per_config, params,
-                                                          path_run_info)
+                        params = param_manager.ModelParams()
+                        params_file_name = 'lenet_300_100.json'
+                        params_file_path = os.path.join('./Params', params_file_name)
+                        params.update(params_file_path)
+                        params.dict['batch norm'] = batch_norm
+                        params.dict['activation'] = activation
+                        params.dict['vcl'] = use_vcl
+                        params.dict['dropout keep prob list'] = dropout_hidden_list
+                        params.dict['number of epochs'] = 80
+                        params.dict['l2 coeff'] = l2_coeff
+                        params.dict['vcl sample size'] = vcl_sample_size
+                        best_index_l, final_train_acc_l, final_valid_acc_l, final_test_acc_l = run_model_multiple_times\
+                                                                 (dataset_dict, dataset_folds_list, dataset, model_runs_per_config, params,
+                                                                  path_run_info)
 
-                file_name = os.path.join(path_run_info, "results_summary.csv")
-                write_results_to_csv_as_row(['train accuracy'] + final_train_acc_l, file_name)
-                write_results_to_csv_as_row(['validation accuracy'] + final_valid_acc_l, file_name)
-                write_results_to_csv_as_row(['test accuracy'] + final_test_acc_l, file_name)
+                        file_name = os.path.join(path_run_info, "results_summary.csv")
+                        write_results_to_csv_as_row(['train accuracy'] + final_train_acc_l, file_name)
+                        write_results_to_csv_as_row(['validation accuracy'] + final_valid_acc_l, file_name)
+                        write_results_to_csv_as_row(['test accuracy'] + final_test_acc_l, file_name)
 
-                result_summary_config = [activation, activation_regu_list[r], depth_list[d]]
-                result_summary = [np.mean(final_train_acc_l), np.mean(final_valid_acc_l), np.mean(final_test_acc_l)]
-                result_summary = result_summary_config + ['{:.3f}'.format(x) for x in result_summary]
+                        result_summary_config = [activation, activation_regu_list[r], depth_list[d]]
+                        result_summary = [np.mean(final_train_acc_l), np.mean(final_valid_acc_l), np.mean(final_test_acc_l)]
+                        result_summary = result_summary_config + ['{:.3f}'.format(x) for x in result_summary]
 
-                write_results_to_csv_as_row(result_summary, summary_result_filename)
+                        write_results_to_csv_as_row(result_summary, summary_result_filename)
 
 
 if __name__ == '__main__':
@@ -159,7 +163,12 @@ if __name__ == '__main__':
     model_runs_per_config = 3
     dataset_folds_list = [0]
     depth_list = [2]
-    activation_list = ['RELU', 'ELU', 'SELU']
+    # activation_list = ['RELU', 'ELU', 'SELU']
+    activation_list = ['RELU']
     activation_regu_list = ['no regularizer', 'batch norm', 'vcl']
+    l2_loss_coeff_list = [0, 0.0005, 0.001]
+    vcl_sample_size_list = [5, 10]
 
-    run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs_per_config, depth_list, activation_list, activation_regu_list)
+
+    run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs_per_config, depth_list, activation_list,
+                                    activation_regu_list, l2_loss_coeff_list, vcl_sample_size_list)

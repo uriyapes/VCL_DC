@@ -67,8 +67,8 @@ def save_dict_to_json(d, json_path):
 
 class ModelParams(Params):
     def __init__(self, batch_norm=False, keep_prob_list=[0, 0, 0, 0.5], hidden_size_list=[256, 256, 256, 256],
-                 activation='RELU', use_vcl=False, vcl_gamma=0.01, random_seeds_flag=1, tf_seed=230, np_seed=100,
-                 num_of_epochs=500, ckpt_flag=0, ckpt_file_name=None):
+                 activation='RELU', use_vcl=False, vcl_gamma=0.01, vcl_sample_size=10, l2_loss_coeff=0.0001,
+                 random_seeds_flag=1, tf_seed=230, np_seed=100, num_of_epochs=500, ckpt_flag=0, ckpt_file_name=None):
         super(ModelParams, self).__init__()
         self.dict['batch norm'] = batch_norm
         self.dict['dropout keep prob list'] = keep_prob_list
@@ -76,6 +76,8 @@ class ModelParams(Params):
         self.dict['activation'] = activation
         self.dict['vcl'] = use_vcl
         self.dict['gamma'] = vcl_gamma
+        self.dict['vcl sample size'] = vcl_sample_size
+        self.dict['l2 coeff'] = l2_loss_coeff
         self.dict['random seeds'] = random_seeds_flag
         self.dict['tf seed'] = tf_seed
         self.dict['np seed'] = np_seed
