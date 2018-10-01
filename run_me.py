@@ -1,4 +1,5 @@
 from model import NeuralNet
+from model import prune_and_retrain
 import param_manager
 import parse_image_seg2 as parse_image_seg
 import my_utilities
@@ -42,7 +43,8 @@ def write_results_to_csv_as_row(list, file_name = 'results.csv'):
 log_num = 0
 
 
-def run_model_multiple_times(dataset_dict, dataset_folds_list, dataset, num_of_model_runs, model_params, results_dir_path ='./results'):
+def run_model_multiple_times(dataset_dict, dataset_folds_list, dataset, num_of_model_runs, model_params,
+                             results_dir_path ='./results', prune_flag=False):
     global log_num
 
     best_index_l =[]
@@ -71,12 +73,21 @@ def run_model_multiple_times(dataset_dict, dataset_folds_list, dataset, num_of_m
             with model:
                 init_model(model)
                 index, train_acc_at_ind, valid_acc_ma_at_ind, test_acc_at_ind = run_model(model)
-            best_index_l.append(index)
-            final_train_acc_l.append(train_acc_at_ind)
-            final_valid_acc_l.append(valid_acc_ma_at_ind)
-            final_test_acc_l.append(test_acc_at_ind)
+                best_index_l.append(index)
+                final_train_acc_l.append(train_acc_at_ind)
+                final_valid_acc_l.append(valid_acc_ma_at_ind)
+                final_test_acc_l.append(test_acc_at_ind)
+                if prune_flag:
+                    prune_itr = 12
+                    prune_th_l = [0.85] * (prune_itr/2) + [0.9]*(prune_itr - prune_itr/2)
+                    prune_th_l = prune_th_l[0:8]
+                    retrain_epoches = 25
+                    pruned_test_acc_l_at_ind, nnz_weights_l = prune_and_retrain(model, prune_th_l, retrain_epoches,
+                                                                    new_tb_logger=False, ckpt_pruned_models_flag=False)
+                else:
+                    pruned_test_acc_l_at_ind, nnz_weights_l = None, None
 
-    return best_index_l, final_train_acc_l, final_valid_acc_l, final_test_acc_l
+    return best_index_l, final_train_acc_l, final_valid_acc_l, final_test_acc_l, pruned_test_acc_l_at_ind, nnz_weights_l
 
 
 def choose_activation_regularizer(activation_regularizer):
@@ -95,7 +106,7 @@ def choose_activation_regularizer(activation_regularizer):
 
 
 def run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs_per_config, depth_list, activation_list,
-                                    activation_regu_list, l2_loss_coeff_list, vcl_sample_size_list):
+                                    activation_regu_list, l2_loss_coeff_list, vcl_sample_size_list, prune_flag):
     timestamp = str(datetime.now().strftime('%Y_%m_%d__%H-%M-%S'))
     path_results_per_dataset = r"./results/" + dataset_dict['dataset_name']
     if not os.path.isdir(path_results_per_dataset):
@@ -104,7 +115,7 @@ def run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs
     os.mkdir(path_results_dir)
     summary_result_filename = os.path.join(path_results_dir, "avg_results_over_{}_runs_over_{}_folds.csv".format(model_runs_per_config, len(dataset_folds_list)))
     write_results_to_csv_as_row(['activation', 'regularizer', 'depth', 'vcl_size', 'l2_coeff', 'train accuracy', 'validation accuracy',
-                                 'test accuracy'], summary_result_filename)
+                                 'test accuracy', 'test accuracy after pruning', 'NNZ weights'], summary_result_filename)
 
     dataset = MnistDataset()
     for vcl_sample_size in vcl_sample_size_list:
@@ -141,9 +152,9 @@ def run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs
                         params.dict['number of epochs'] = 80
                         params.dict['l2 coeff'] = l2_coeff
                         params.dict['vcl sample size'] = vcl_sample_size
-                        best_index_l, final_train_acc_l, final_valid_acc_l, final_test_acc_l = run_model_multiple_times\
-                                                                 (dataset_dict, dataset_folds_list, dataset, model_runs_per_config, params,
-                                                                  path_run_info)
+                        best_index_l, final_train_acc_l, final_valid_acc_l, final_test_acc_l, pruned_test_acc_l_at_ind, nnz_weights_l\
+                            = run_model_multiple_times(dataset_dict, dataset_folds_list, dataset, model_runs_per_config,
+                                                       params, path_run_info, prune_flag)
 
                         file_name = os.path.join(path_run_info, "results_summary.csv")
                         write_results_to_csv_as_row(['train accuracy'] + final_train_acc_l, file_name)
@@ -152,7 +163,8 @@ def run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs
 
                         result_summary_config = [activation, activation_regu_list[r], depth_list[d], vcl_sample_size, l2_coeff]
                         result_summary = [np.mean(final_train_acc_l), np.mean(final_valid_acc_l), np.mean(final_test_acc_l)]
-                        result_summary = result_summary_config + ['{:.3f}'.format(x) for x in result_summary]
+                        result_summary = result_summary_config + ['{:.3f}'.format(x) for x in result_summary] + \
+                                         [pruned_test_acc_l_at_ind, nnz_weights_l]
 
                         write_results_to_csv_as_row(result_summary, summary_result_filename)
 
@@ -166,15 +178,17 @@ if __name__ == '__main__':
     dataset_dict = dataset_params.dict
     dataset_dict['dataset_name'] = 'MNIST'
 
-    model_runs_per_config = 3
+    model_runs_per_config = 1
     dataset_folds_list = [0]
     depth_list = [2]
     # activation_list = ['RELU', 'ELU', 'SELU']
-    activation_list = ['RELU']
-    activation_regu_list = ['no regularizer', 'batch norm', 'vcl']
-    l2_loss_coeff_list = [0, 0.0005, 0.001]
+    activation_list = ['RELU', 'SELU']
+    activation_regu_list = ['batch norm']
+    # activation_regu_list = ['no regularizer']
+    l2_loss_coeff_list = [0, 0.0001]
     vcl_sample_size_list = [10]
+    prune_flag = True
 
 
     run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs_per_config, depth_list, activation_list,
-                                    activation_regu_list, l2_loss_coeff_list, vcl_sample_size_list)
+                                    activation_regu_list, l2_loss_coeff_list, vcl_sample_size_list, prune_flag)

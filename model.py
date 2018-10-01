@@ -441,28 +441,28 @@ class NeuralNet(object):
 
             self.logger.info("NNZ weights before pruning {}".format(self.sess.run((self.count_nnz_weights_l))))
             self.logger.info("NNZ mask values before pruning {}".format(self.sess.run((self.count_nnz_mask_l))))
-            logger.debug("memory usage 1: {}".format(my_utilities.memory()))
+            self.logger.debug("memory usage 1: {}".format(my_utilities.memory()))
             # This op seems to take memory
             self.sess.run(self.update_prune_masks, feed_dict={self.threshold_ph: prune_th})
             # self.sess.run(self.update_prune_masks)
-            logger.debug("memory usage 2: {}".format(my_utilities.memory()))
+            self.logger.debug("memory usage 2: {}".format(my_utilities.memory()))
             self.sess.run(self.apply_prune_weights)
-            logger.debug("memory usage 3: {}".format(my_utilities.memory()))
+            self.logger.debug("memory usage 3: {}".format(my_utilities.memory()))
             self.logger.info("NNZ weights after pruning {}".format(self.sess.run((self.count_nnz_weights_l))))
             self.logger.info("NNZ mask values after pruning {}".format(self.sess.run((self.count_nnz_mask_l))))
             self.sess.run(tf.variables_initializer(self.optimizer_class.variables()))
-            logger.debug("memory usage 4: {}".format(my_utilities.memory()))
+            self.logger.debug("memory usage 4: {}".format(my_utilities.memory()))
             # This op seems to take memory
             train_acc_l, valid_acc_l, test_acc_l = self._train()
-            logger.debug("memory usage 5: {}".format(my_utilities.memory()))
+            self.logger.debug("memory usage 5: {}".format(my_utilities.memory()))
             nnz_weights = self.sess.run(self.count_nnz_weights_l)
             self.logger.info("NNZ weights after retraining {}".format(nnz_weights))
             self.logger.info("NNZ mask values after retraining  {}".format(self.sess.run((self.count_nnz_mask_l))))
-            logger.debug("memory usage 6: {}".format(my_utilities.memory()))
+            self.logger.debug("memory usage 6: {}".format(my_utilities.memory()))
         return train_acc_l, valid_acc_l, test_acc_l, nnz_weights
 
 
-def prune_and_retrain(model, prune_th_l, retrain_epoches, new_tb_logger=True):
+def prune_and_retrain(model, prune_th_l, retrain_epoches, new_tb_logger=True, ckpt_pruned_models_flag=True):
     """
 
     :param model: The model we wish to prune
@@ -488,7 +488,8 @@ def prune_and_retrain(model, prune_th_l, retrain_epoches, new_tb_logger=True):
         index, train_acc_at_ind, valid_acc_ma_at_ind, test_acc_at_ind = model.find_best_accuracy(train_acc_l,
                                                                                                  valid_acc_l,
                                                                                                  test_acc_l)
-        model.save_variables("./results/model_after_{}_prunes".format(i + 1))
+        if ckpt_pruned_models_flag:
+            model.save_variables("./results/model_after_{}_prunes".format(i + 1))
         test_acc_l_at_ind.append(test_acc_at_ind)
 
         summary = model.sess.run(model.merged)
