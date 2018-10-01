@@ -9,7 +9,7 @@ import os
 from datetime import datetime
 import time
 import mnist_input_pipe
-
+import summary_manager
 parser = argparse.ArgumentParser()
 parser.add_argument('--params_dir', default='./Params', help="directory containing .json file detailing the model params")
 
@@ -84,6 +84,7 @@ class NeuralNet(object):
         self.optimizer = self.build_optimizer(self.learning_rate_ph, self.loss)
         self.tf_saver = tf.train.Saver()
         self.set_prune_op()
+        self.merged = tf.summary.merge_all()
 
     def set_architecture_variables(self, weights_init_type="He"):
         if weights_init_type == "He":
@@ -106,6 +107,7 @@ class NeuralNet(object):
             weights_init = tf.random_normal_initializer(stddev=1 / np.sqrt(self.dataset.get_dimensions()[0]))
             self.weights_l.append(tf.get_variable('weights', shape=[self.dataset.get_dimensions()[0], self.layer_size_l[0]],
                                                   dtype=tf.float32, initializer=weights_init))
+            summary_manager.variable_summaries(self.weights_l[0], 'weights/summary')
             self.biases_l.append(tf.get_variable('bias', shape=[self.layer_size_l[0]], dtype=tf.float32,
                                              initializer=tf.zeros_initializer()))
             tf.add_to_collection('l2_loss', (tf.nn.l2_loss(self.weights_l[0])))
@@ -206,24 +208,31 @@ class NeuralNet(object):
         tf.add_to_collection('l2_norm', (tf.reduce_mean(tf.square(1 - (var1) / (var2 + eps1)))))
 
 
-    def train_model(self, ckpt_path = None):
-        self.sess = tf.Session()
-        self._init_sess(ckpt_path)
+    def train_model(self, tb_logger, ckpt_path = None):
+        self.set_tb_logger(tb_logger)
+        self.init_sess(ckpt_path)
         return self._train()
 
 
-    def _init_sess(self, ckpt_path=None):
-        if ckpt_path is None:
-            self.sess.run(tf.global_variables_initializer())
-            self.sess.run(tf.variables_initializer(tf.get_collection(tf.GraphKeys.PRUNING_MASKS)))
-        else:
+    def init_sess(self, ckpt_path=None):
+        self.sess = tf.Session()
+
+        self.sess.run(tf.global_variables_initializer())
+        self.sess.run(tf.variables_initializer(tf.get_collection(tf.GraphKeys.PRUNING_MASKS)))
+
+        if ckpt_path is not None:
             self.load_variables(ckpt_path)
+
+    def set_tb_logger(self, tb_logger):
+        # Note: Order matters, creating merge attribute by doing tf.summary.merge_all after defining tensorboard will
+        # cause problems since it will request to feed the tb dict placeholders when doing sess.run(merge)
+        assert hasattr(self, 'merged'), "tb_logger must be set after graph summary merge has occurred"
+        self.tb_logger = tb_logger
 
     def _train(self):
         train_acc_l = []
         valid_acc_l = []
         test_acc_l = []
-
         self.epoch = 0
         prev_epoch = 0
         # TODO: check shuffling is working
@@ -269,6 +278,7 @@ class NeuralNet(object):
         # self.dataset.count_classes(batch_labels)
         self.logger.info(
             "Training stopped at epoch: {} after {:.0f} seconds".format(self.epoch, (time.time() - start_time)))
+
         return train_acc_l, valid_acc_l, test_acc_l
 
     def set_prune_op(self):
@@ -309,6 +319,7 @@ class NeuralNet(object):
             self.dataset.prepare_train_ds(self.sess, self.batch_size, np.int64(self.epoch * self.params['tf seed']))
             train_pred, train_acc = self.eval_dataset(sess)
             self.logger.info('Train accuracy: %.3f' % train_acc)
+
             # train_pred, train_acc = self.eval_set(sess, self.dataset.get_train_set(), self.dataset.get_train_labels())
             # self.logger.info('Train accuracy: %.3f' % train_acc)
 
@@ -326,6 +337,11 @@ class NeuralNet(object):
             # test_pred, test_acc = self.eval_set(sess, self.dataset.get_test_set(), self.dataset.get_test_labels())
             test_pred, test_acc = self.eval_dataset(sess)
             self.logger.info('Test accuracy: %.3f' % test_acc)
+
+            summaries_dict = {'train/acc_per_epoch': train_acc,
+                              'validation/acc_per_epoch': valid_acc,
+                              'test/acc_per_epoch' : test_acc}
+            self.tb_logger.summarize(sess, self.epoch, summaries_dict)
         return train_acc, valid_acc, test_acc
 
 
@@ -409,6 +425,7 @@ class NeuralNet(object):
 
     def load_variables(self, filename):
         assert hasattr(self, 'sess')
+        filename = filename + ".ckpt"
         self.tf_saver.restore(self.sess, filename)
 
     @staticmethod
@@ -445,12 +462,51 @@ class NeuralNet(object):
         return train_acc_l, valid_acc_l, test_acc_l, nnz_weights
 
 
+def prune_and_retrain(model, prune_th_l, retrain_epoches, new_tb_logger=True):
+    """
+
+    :param model: The model we wish to prune
+    :param prune_th_l: a list containing prune thresholds, the length of the list determines how many prunes iteration will be
+    :param retrain_epoches: (after the pruning) how many epoches are used to the retraining
+    :param new_tb_logger: weather to create a new tb logger for each prune or to disable tb
+    :return:
+    """
+
+    model.params['number of epochs'] = retrain_epoches
+    test_acc_l_at_ind = []
+    nnz_weights_l = []
+
+    for i, prune_th in enumerate(prune_th_l):
+        model.logger.debug("memory usage before {} prune iter: {}".format(i, my_utilities.memory()))
+        if new_tb_logger:
+            model.tb_logger.set_file_writer(summary_dir='./results/summaries/prune_{}'.format(i + 1), create_dir_flag=True)
+        else:
+            model.tb_logger.set_write_enable(False)
+        train_acc_l, valid_acc_l, test_acc_l, nnz_weights = model.prune(prune_th)
+        nnz_weights_l.append(sum(nnz_weights))
+        model.logger.debug("memory usage after {} prune iter: {}".format(i, my_utilities.memory()))
+        index, train_acc_at_ind, valid_acc_ma_at_ind, test_acc_at_ind = model.find_best_accuracy(train_acc_l,
+                                                                                                 valid_acc_l,
+                                                                                                 test_acc_l)
+        model.save_variables("./results/model_after_{}_prunes".format(i + 1))
+        test_acc_l_at_ind.append(test_acc_at_ind)
+
+        summary = model.sess.run(model.merged)
+        model.tb_logger.summary_write(summary, i)
+
+    model.logger.info("nnz_weights_l: {}".format(nnz_weights_l))
+    model.logger.info("test_acc_l: {}".format(test_acc_l_at_ind))
+
+    return test_acc_l_at_ind, nnz_weights_l
+
+
 
 
 if __name__ == '__main__':
 
     logger = my_utilities.set_a_logger('log', dirpath="./Logs")
     logger.info('Start logging')
+
     # Load the parameters from json file
     args = parser.parse_args()
     # json_filename = 'model_params_template.json'
@@ -463,12 +519,14 @@ if __name__ == '__main__':
     model_params.update(json_path)
     params = model_params.dict
     # params = param_manager.ModelParams.create_model_params(batch_norm=1)
-    # params['number of epochs'] = 1
+    params['number of epochs'] = 80
     # params['check point flag'] = 1
     # params['check point name'] = './results/unitest2'
     # params['batch norm'] = 0
     # params['activation'] = 'ELU'
-    params['vcl'] = 'True'
+    # params['vcl'] = 'True'
+    # params['vcl sample size'] = 20
+    params['l2 coeff"'] = 0
 
 
     json_path = os.path.join(args.params_dir, 'image_segmentation_params.json')
@@ -487,25 +545,35 @@ if __name__ == '__main__':
     model = NeuralNet(dataset, logger, params)
     with model:
         model.build_model()
-        train_acc_l, valid_acc_l, test_acc_l = model.train_model()
+        # IMPORTANT: MUST be created after buliding the model, see set_tb_logger note
+        tb_logger = summary_manager.TensorboardLogger(summary_dir='./results/summaries/train', create_dir_flag=True,
+                                                      scalar_tags=['train/acc_per_epoch', 'validation/acc_per_epoch',
+                                                                   'test/acc_per_epoch'])
+        train_acc_l, valid_acc_l, test_acc_l = model.train_model(tb_logger)
         model.find_best_accuracy(train_acc_l, valid_acc_l, test_acc_l)
+        model.save_variables('./results/RELU_noReg_80epoch_noL2')
         # train_acc, valid_acc, test_acc = model.eval_model()
-        model.params['number of epochs'] = 25
+
+        # prune_itr = 2
+        # prune_th_l = [0.85] * (prune_itr/2) + [0.9]*(prune_itr - prune_itr/2)
+        # test_acc_l_at_ind, nnz_weights_l = prune_and_retrain(model, prune_th_l, 2, )
+        #
+        # if model.params['check point flag']:
+        #     model.save_variables(model.params['check point name'])
+
+
+    dataset.prepare_datasets()
+    with model:
+        model.build_model()
+        tb_logger = summary_manager.TensorboardLogger(summary_dir='./results/summaries/train', create_dir_flag=True,
+                                                      scalar_tags=['train/acc_per_epoch', 'validation/acc_per_epoch',
+                                                                   'test/acc_per_epoch'])
+        model.set_tb_logger(tb_logger)
+        model.init_sess('./results/RELU_noReg_80epoch_noL2')
         prune_itr = 12
         prune_th_l = [0.85] * (prune_itr/2) + [0.9]*(prune_itr - prune_itr/2)
-        test_acc_l_at_ind = []
-        nnz_weights_l = []
-        for i in xrange(prune_itr):
-            logger.debug("memory usage before {} prune iter: {}".format(i, my_utilities.memory()))
-            train_acc_l, valid_acc_l, test_acc_l, nnz_weights = model.prune(prune_th_l[i])
-            nnz_weights_l.append(sum(nnz_weights))
-            logger.debug("memory usage after {} prune iter: {}".format(i, my_utilities.memory()))
-            index, train_acc_at_ind, valid_acc_ma_at_ind, test_acc_at_ind = model.find_best_accuracy(train_acc_l, valid_acc_l, test_acc_l)
-            model.save_variables("./results/model_after_{}_prunes".format(i+1))
-            test_acc_l_at_ind.append(test_acc_at_ind)
-
-        logger.info("nnz_weights_l: {}".format(nnz_weights_l))
-        logger.info("test_acc_l: {}".format(test_acc_l_at_ind))
+        retrain_epoches = 25
+        test_acc_l_at_ind, nnz_weights_l = prune_and_retrain(model, prune_th_l, retrain_epoches)
 
         if model.params['check point flag']:
             model.save_variables(model.params['check point name'])

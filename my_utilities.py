@@ -3,7 +3,16 @@ import logging
 from datetime import datetime
 import psutil
 
-def set_a_logger(log_name='log', dirpath="./", filename=None, console_level=logging.DEBUG, file_level=logging.DEBUG):
+
+CRITICAL = 50
+FATAL = CRITICAL
+ERROR = 40
+WARNING = 30
+WARN = WARNING
+INFO = 20
+DEBUG = 10
+NOTSET = 0
+def set_a_logger(log_name='log', dirpath="./", filename=None, console_level=DEBUG, file_level=DEBUG):
     """
     Returns a logger object which logs messages to file and prints them to console.
     If you want to log messages from different modules you need to use the same log_name in all modules,  by doing so
@@ -34,10 +43,10 @@ def set_a_logger(log_name='log', dirpath="./", filename=None, console_level=logg
 
     # create logger
     logger = logging.getLogger(log_name)
-    logger.setLevel(level=logging.DEBUG)
+    logger.setLevel(level=DEBUG)
 
     if not logger.handlers:
-        # create console handler and set level to debug
+        # create console handler and set level
         ch = logging.StreamHandler()
         ch.setLevel(console_level)
 
@@ -58,7 +67,24 @@ def set_a_logger(log_name='log', dirpath="./", filename=None, console_level=logg
     logger.critical('Logging level inside file is: {}'.format(logging._levelNames[file_level]))
     return logger
 
+
+def get_logger_handler_path(logger):
+    """Get a logger created by set_a_logger function and return the path to which the log is written"""
+    assert type(logger.handlers[1]) == logging.FileHandler
+    log_filename = logger.handlers[1].baseFilename
+    return os.path.dirname(log_filename)
+
+
+def mkdir_safe(dir_path):
+    if not os.path.isdir(dir_path):
+        # assert os.path.exists(os.path.dirname(os.path.abspath(dir_path)))  # Assert root path exists - already taken care by function assert OSError
+        os.mkdir(dir_path)
+
+
 def memory():
+    """
+    :return: returns the amount of memory used in GB for the python script
+    """
     pid = os.getpid()
     py = psutil.Process(pid)
     memoryUse = py.memory_info()[0]/2.**30  # memory use in GB...I think

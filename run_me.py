@@ -9,6 +9,7 @@ from datetime import datetime
 import argparse
 import logging #TODO: remove from here
 from mnist_input_pipe import MnistDataset
+import summary_manager
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--params_dir', default='./Params', help="directory containing .json file detailing the model and datasets params")
@@ -24,7 +25,10 @@ def init_model(model):
 
 
 def run_model(model):
-    train_acc_l, valid_acc_l, test_acc_l = model.train_model()
+    tb_logger = summary_manager.TensorboardLogger(summary_dir='./results/summaries/train', create_dir_flag=True,
+                                                  scalar_tags=['train/acc_per_epoch', 'validation/acc_per_epoch',
+                                                               'test/acc_per_epoch'])
+    train_acc_l, valid_acc_l, test_acc_l = model.train_model(tb_logger)
     index, train_acc_at_ind, valid_acc_ma_at_ind, test_acc_at_ind = model.find_best_accuracy(train_acc_l, valid_acc_l, test_acc_l)
     return index, train_acc_at_ind, valid_acc_ma_at_ind, test_acc_at_ind
 
@@ -169,7 +173,7 @@ if __name__ == '__main__':
     activation_list = ['RELU']
     activation_regu_list = ['no regularizer', 'batch norm', 'vcl']
     l2_loss_coeff_list = [0, 0.0005, 0.001]
-    vcl_sample_size_list = [5, 10]
+    vcl_sample_size_list = [10]
 
 
     run_model_with_diff_hyperparams(dataset_dict, dataset_folds_list, model_runs_per_config, depth_list, activation_list,
