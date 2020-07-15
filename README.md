@@ -1,4 +1,6 @@
-# VCL_reproducing
+
+This repo evaluate weight pruning efficency (see Deep Compression: Compressing Deep Neural Networks with Pruning, Trained Quantization and Huffman Coding paper) when combined with VCL technique (see E. Littwin, L. Wolf. Regularizing by the Variance of the Activations' Sample-Variances. Neural Information Processing Systems (NIPS) paper).
+
 
 The main file is run_me.py. Run this file to train and test the model with different configurations (model depth, activation type,
 activation regularizer and which dataset fold to use).
